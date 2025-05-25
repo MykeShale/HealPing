@@ -84,3 +84,48 @@ Used **Claude.ai** to generate polite and personalized reminders.
 ```bash
 git clone https://github.com/MykeShale/HealPing.git
 cd HealPing
+```
+
+## 🔭 Future Improvements
+> - **Auto-trigger** daily reminders
+
+> - **Integrate** calendar sync (Google/Outlook)
+
+> - **Support** multi-language reminders
+
+> - **Analytics** dashboard for clinics
+
+> - **Voice** call reminders via Twilio
+
+## 2. Set Up Supabase
+> - Create a Supabase project
+
+> - Import the schema from /schema.sql
+
+> - Add your Supabase URL and API keys to .env
+
+## 3. Run the App
+```
+npm install
+npm run dev
+```
+
+## 4. Optional: Configure Twilio for SMS
+> - Create a Twilio account
+
+> - Set credentials in .env
+
+> - Use API to send reminders
+
+## 🔭 Future Improvements
+> - Auto-trigger daily reminders
+
+> - Integrate calendar sync (Google/Outlook)
+
+> - Support multi-language reminders
+
+> - Analytics dashboard for clinics
+
+> - Voice call reminders via Twilio
+
+
