@@ -38,18 +38,6 @@ This app leverages AI to generate custom messages and uses low-code platforms to
 
 ---
 
-## ⚙️ Tech Stack
-
-| Layer | Tool |
-|-------|------|
-| **Frontend** | MGX / Rork.app (UI builder) |
-| **Backend** | Supabase (auth, database, API) |
-| **AI Assistant** | Claude.ai (message prompt generation) |
-| **SMS/WhatsApp** | Twilio API or mocked for demo |
-| **Docs** | Lovable.dev (auto-generated docs) |
-
----
-
 ## 🧠 AI Prompt Engineering
 Used **Claude.ai** to generate polite and personalized reminders.
 
