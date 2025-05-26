@@ -4,7 +4,7 @@ export interface Database {
       profiles: {
         Row: {
           id: string
-          role: 'doctor' | 'staff' | 'patient'
+          role: "doctor" | "staff" | "patient"
           full_name: string
           phone: string | null
           avatar_url: string | null
@@ -14,7 +14,7 @@ export interface Database {
         }
         Insert: {
           id: string
-          role: 'doctor' | 'staff' | 'patient'
+          role: "doctor" | "staff" | "patient"
           full_name: string
           phone?: string | null
           avatar_url?: string | null
@@ -24,7 +24,7 @@ export interface Database {
         }
         Update: {
           id?: string
-          role?: 'doctor' | 'staff' | 'patient'
+          role?: "doctor" | "staff" | "patient"
           full_name?: string
           phone?: string | null
           avatar_url?: string | null
@@ -105,7 +105,7 @@ export interface Database {
           clinic_id: string
           appointment_date: string
           follow_up_date: string | null
-          status: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+          status: "scheduled" | "completed" | "cancelled" | "no_show"
           treatment_type: string | null
           notes: string | null
           created_at: string
@@ -117,7 +117,7 @@ export interface Database {
           clinic_id: string
           appointment_date: string
           follow_up_date?: string | null
-          status?: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+          status?: "scheduled" | "completed" | "cancelled" | "no_show"
           treatment_type?: string | null
           notes?: string | null
           created_at?: string
@@ -129,7 +129,7 @@ export interface Database {
           clinic_id?: string
           appointment_date?: string
           follow_up_date?: string | null
-          status?: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+          status?: "scheduled" | "completed" | "cancelled" | "no_show"
           treatment_type?: string | null
           notes?: string | null
           created_at?: string
@@ -139,30 +139,30 @@ export interface Database {
         Row: {
           id: string
           appointment_id: string
-          reminder_type: 'sms' | 'whatsapp' | 'email' | 'call'
+          reminder_type: "sms" | "whatsapp" | "email" | "call"
           scheduled_for: string
           sent_at: string | null
-          status: 'pending' | 'sent' | 'delivered' | 'failed'
+          status: "pending" | "sent" | "delivered" | "failed"
           message_content: string | null
           created_at: string
         }
         Insert: {
           id?: string
           appointment_id: string
-          reminder_type: 'sms' | 'whatsapp' | 'email' | 'call'
+          reminder_type: "sms" | "whatsapp" | "email" | "call"
           scheduled_for: string
           sent_at?: string | null
-          status?: 'pending' | 'sent' | 'delivered' | 'failed'
+          status?: "pending" | "sent" | "delivered" | "failed"
           message_content?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           appointment_id?: string
-          reminder_type?: 'sms' | 'whatsapp' | 'email' | 'call'
+          reminder_type?: "sms" | "whatsapp" | "email" | "call"
           scheduled_for?: string
           sent_at?: string | null
-          status?: 'pending' | 'sent' | 'delivered' | 'failed'
+          status?: "pending" | "sent" | "delivered" | "failed"
           message_content?: string | null
           created_at?: string
         }
