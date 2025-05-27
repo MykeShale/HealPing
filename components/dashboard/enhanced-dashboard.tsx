@@ -28,20 +28,41 @@ export function EnhancedDashboard() {
   })
   const [loading, setLoading] = useState(true)
   const [realTimeUpdates, setRealTimeUpdates] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (profile?.clinic_id) {
       fetchStats()
       setupRealTimeSubscriptions()
+    } else if (profile && !profile.clinic_id) {
+      // User has profile but no clinic - stop loading
+      setLoading(false)
     }
   }, [profile])
 
   const fetchStats = async () => {
+    if (!profile?.clinic_id) {
+      console.log("No clinic_id found, skipping stats fetch")
+      setLoading(false)
+      return
+    }
+
     try {
-      const data = await getDashboardStats(profile?.clinic_id!)
+      setLoading(true)
+      const data = await getDashboardStats(profile.clinic_id)
       setStats(data)
+      setError(null)
     } catch (error) {
       console.error("Error fetching dashboard stats:", error)
+      setError("Failed to load dashboard data")
+      // Set default stats to prevent infinite loading
+      setStats({
+        total_patients: 0,
+        today_appointments: 0,
+        pending_reminders: 0,
+        upcoming_followups: 0,
+        overdue_followups: 0,
+      })
     } finally {
       setLoading(false)
     }

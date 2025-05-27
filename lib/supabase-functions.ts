@@ -2,13 +2,89 @@ import { getSupabase } from "./supabase"
 
 // Dashboard statistics
 export async function getDashboardStats(clinicId: string) {
-  const supabase = getSupabase()
-  const { data, error } = await supabase.rpc("get_dashboard_stats", {
-    clinic_uuid: clinicId,
-  })
+  if (!clinicId) {
+    throw new Error("Clinic ID is required")
+  }
 
-  if (error) throw error
-  return data
+  const supabase = getSupabase()
+
+  try {
+    // Try to use the RPC function first
+    const { data, error } = await supabase.rpc("get_dashboard_stats", {
+      clinic_uuid: clinicId,
+    })
+
+    if (error) {
+      console.warn("RPC function failed, falling back to manual queries:", error)
+      // Fallback to manual queries if RPC doesn't exist
+      return await getDashboardStatsManual(clinicId)
+    }
+
+    return (
+      data || {
+        total_patients: 0,
+        today_appointments: 0,
+        pending_reminders: 0,
+        upcoming_followups: 0,
+        overdue_followups: 0,
+      }
+    )
+  } catch (error) {
+    console.error("Dashboard stats error:", error)
+    // Return fallback data instead of throwing
+    return {
+      total_patients: 0,
+      today_appointments: 0,
+      pending_reminders: 0,
+      upcoming_followups: 0,
+      overdue_followups: 0,
+    }
+  }
+}
+
+// Fallback function for manual queries
+async function getDashboardStatsManual(clinicId: string) {
+  const supabase = getSupabase()
+  const today = new Date().toISOString().split("T")[0]
+
+  try {
+    // Get total patients
+    const { count: totalPatients } = await supabase
+      .from("patients")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+
+    // Get today's appointments
+    const { count: todayAppointments } = await supabase
+      .from("appointments")
+      .select("*", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .gte("appointment_date", today)
+      .lt("appointment_date", `${today}T23:59:59`)
+
+    // Get pending reminders
+    const { count: pendingReminders } = await supabase
+      .from("reminders")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending")
+
+    return {
+      total_patients: totalPatients || 0,
+      today_appointments: todayAppointments || 0,
+      pending_reminders: pendingReminders || 0,
+      upcoming_followups: 0, // Simplified for now
+      overdue_followups: 0, // Simplified for now
+    }
+  } catch (error) {
+    console.error("Manual stats query failed:", error)
+    return {
+      total_patients: 0,
+      today_appointments: 0,
+      pending_reminders: 0,
+      upcoming_followups: 0,
+      overdue_followups: 0,
+    }
+  }
 }
 
 // Patient management
