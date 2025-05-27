@@ -25,54 +25,95 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error("Auth session error:", error)
-        setError(error.message)
-        setLoading(false)
-        return
-      }
+    let mounted = true
 
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
+    // Get initial session
+    const getInitialSession = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
+
+        if (!mounted) return
+
+        if (error) {
+          console.error("Auth session error:", error)
+          setError(error.message)
+          setLoading(false)
+          return
+        }
+
+        setUser(session?.user ?? null)
+
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
+          setLoading(false)
+        }
+      } catch (err) {
+        if (!mounted) return
+        console.error("Session fetch error:", err)
+        setError("Failed to load session")
         setLoading(false)
       }
-    })
+    }
+
+    getInitialSession()
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+
       console.log("Auth state changed:", event, session?.user?.id)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchProfile(session.user.id)
-      } else {
+
+      if (event === "SIGNED_OUT") {
+        setUser(null)
         setProfile(null)
+        setError(null)
         setLoading(false)
+        return
+      }
+
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        setUser(session?.user ?? null)
+
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
+          setLoading(false)
+        }
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const fetchProfile = async (userId: string) => {
     try {
+      setLoading(true)
+      setError(null)
+
       const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (error) {
-        // If profile doesn't exist, that's okay - user might be new
         if (error.code === "PGRST116") {
           console.log("No profile found for user, this is normal for new users")
           setProfile(null)
         } else {
-          throw error
+          console.error("Profile fetch error:", error)
+          setError(error.message)
         }
       } else {
         setProfile(data)
+        setError(null)
       }
     } catch (error) {
       console.error("Error fetching profile:", error)
@@ -83,9 +124,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      console.error("Error signing out:", error)
+    try {
+      setLoading(true)
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error("Error signing out:", error)
+        setError(error.message)
+      } else {
+        // Clear state immediately
+        setUser(null)
+        setProfile(null)
+        setError(null)
+        // Redirect to home page
+        window.location.href = "/"
+      }
+    } catch (error) {
+      console.error("Logout error:", error)
+      setError("Failed to sign out")
+    } finally {
+      setLoading(false)
     }
   }
 
