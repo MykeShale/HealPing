@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if (event === "SIGNED_IN") {
         setUser(session?.user ?? null)
 
         if (session?.user) {
@@ -87,6 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null)
           setLoading(false)
         }
+      }
+
+      if (event === "TOKEN_REFRESHED") {
+        setUser(session?.user ?? null)
+        // Don't refetch profile on token refresh, just update user
+        setLoading(false)
       }
     })
 
