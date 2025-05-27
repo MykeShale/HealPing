@@ -1,11 +1,14 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { RoleSelection } from "@/components/auth/role-selection"
 
 export default function AuthCallback() {
   const router = useRouter()
+  const [needsRoleSelection, setNeedsRoleSelection] = useState(false)
+  const [userInfo, setUserInfo] = useState<{ id: string; email: string } | null>(null)
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -23,20 +26,22 @@ export default function AuthCallback() {
           const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.session.user.id).single()
 
           if (!profile) {
-            // Create profile for new user
-            const { error: profileError } = await supabase.from("profiles").insert({
+            // User needs to select role and complete profile
+            setUserInfo({
               id: data.session.user.id,
-              full_name: data.session.user.user_metadata.full_name || "New User",
-              role: "doctor", // Default role
-              avatar_url: data.session.user.user_metadata.avatar_url,
+              email: data.session.user.email!,
             })
-
-            if (profileError) {
-              console.error("Error creating profile:", profileError)
+            setNeedsRoleSelection(true)
+          } else {
+            // User has profile, redirect to appropriate dashboard
+            if (profile.role === "doctor") {
+              router.push("/doctor/dashboard")
+            } else if (profile.role === "patient") {
+              router.push("/patient/dashboard")
+            } else {
+              router.push("/dashboard")
             }
           }
-
-          router.push("/dashboard")
         } else {
           router.push("/")
         }
@@ -48,6 +53,15 @@ export default function AuthCallback() {
 
     handleAuthCallback()
   }, [router])
+
+  const handleRoleSelectionComplete = () => {
+    // Refresh the page to trigger auth state update
+    window.location.reload()
+  }
+
+  if (needsRoleSelection && userInfo) {
+    return <RoleSelection userId={userInfo.id} userEmail={userInfo.email} onComplete={handleRoleSelectionComplete} />
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
