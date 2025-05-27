@@ -1,6 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { DashboardWrapper } from "@/components/ui/dashboard-wrapper"
+import { useDashboardData } from "@/hooks/use-dashboard-data"
+import { getReminders, getPatients } from "@/lib/supabase-functions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +22,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/auth-context"
-import { getReminders, getPatients } from "@/lib/supabase-functions"
 import {
   Bell,
   MessageSquare,
@@ -32,6 +34,7 @@ import {
   Search,
   Settings,
   TrendingUp,
+  AlertTriangle,
 } from "lucide-react"
 import { motion } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
@@ -57,9 +60,29 @@ interface Reminder {
 export default function DoctorRemindersPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
-  const [reminders, setReminders] = useState<Reminder[]>([])
-  const [patients, setPatients] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+
+  const {
+    data: reminders,
+    loading: remindersLoading,
+    error: remindersError,
+    refetch: refetchReminders,
+  } = useDashboardData<Reminder[]>({
+    fetchFunction: getReminders,
+    fallbackData: [],
+  })
+
+  const {
+    data: patients,
+    loading: patientsLoading,
+    error: patientsError,
+  } = useDashboardData({
+    fetchFunction: getPatients,
+    fallbackData: [],
+  })
+
+  const loading = remindersLoading || patientsLoading
+  const error = remindersError || patientsError
+
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterType, setFilterType] = useState("all")
@@ -81,33 +104,6 @@ export default function DoctorRemindersPage() {
     max_reminders: 3,
   })
 
-  useEffect(() => {
-    if (profile?.clinic_id) {
-      fetchReminders()
-      fetchPatients()
-    }
-  }, [profile])
-
-  const fetchReminders = async () => {
-    try {
-      const remindersData = await getReminders(profile?.clinic_id!)
-      setReminders(remindersData)
-    } catch (error) {
-      console.error("Error fetching reminders:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchPatients = async () => {
-    try {
-      const patientsData = await getPatients(profile?.clinic_id!)
-      setPatients(patientsData)
-    } catch (error) {
-      console.error("Error fetching patients:", error)
-    }
-  }
-
   const handleSendBulkReminder = async () => {
     try {
       // Implementation for bulk reminder sending
@@ -116,7 +112,7 @@ export default function DoctorRemindersPage() {
         description: "Bulk reminders scheduled successfully",
       })
       setIsBulkReminderOpen(false)
-      fetchReminders()
+      refetchReminders()
     } catch (error) {
       toast({
         title: "Error",
@@ -170,518 +166,588 @@ export default function DoctorRemindersPage() {
   const deliveredCount = reminders.filter((r) => r.status === "delivered").length
   const failedCount = reminders.filter((r) => r.status === "failed").length
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-        >
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reminder Management</h1>
-            <p className="text-gray-600">Manage patient reminders and notifications</p>
-          </div>
-          <div className="flex gap-3">
-            <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Notification Settings</DialogTitle>
-                  <DialogDescription>Configure your reminder preferences</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Notification Channels</h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="sms">SMS Notifications</Label>
-                        <Switch
-                          id="sms"
-                          checked={notificationSettings.sms_enabled}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, sms_enabled: checked }))
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="email">Email Notifications</Label>
-                        <Switch
-                          id="email"
-                          checked={notificationSettings.email_enabled}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, email_enabled: checked }))
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="whatsapp">WhatsApp Notifications</Label>
-                        <Switch
-                          id="whatsapp"
-                          checked={notificationSettings.whatsapp_enabled}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, whatsapp_enabled: checked }))
-                          }
-                        />
+    <DashboardWrapper requiredRole="doctor" title="Reminder Management" description="Loading your reminders...">
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+          >
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Reminder Management</h1>
+              <p className="text-gray-600">Manage patient reminders and notifications</p>
+            </div>
+            <div className="flex gap-3">
+              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Notification Settings</DialogTitle>
+                    <DialogDescription>Configure your reminder preferences</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Notification Channels</h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="sms">SMS Notifications</Label>
+                          <Switch
+                            id="sms"
+                            checked={notificationSettings.sms_enabled}
+                            onCheckedChange={(checked) =>
+                              setNotificationSettings((prev) => ({ ...prev, sms_enabled: checked }))
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="email">Email Notifications</Label>
+                          <Switch
+                            id="email"
+                            checked={notificationSettings.email_enabled}
+                            onCheckedChange={(checked) =>
+                              setNotificationSettings((prev) => ({ ...prev, email_enabled: checked }))
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="whatsapp">WhatsApp Notifications</Label>
+                          <Switch
+                            id="whatsapp"
+                            checked={notificationSettings.whatsapp_enabled}
+                            onCheckedChange={(checked) =>
+                              setNotificationSettings((prev) => ({ ...prev, whatsapp_enabled: checked }))
+                            }
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Automation Settings</h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="auto">Automatic Reminders</Label>
-                        <Switch
-                          id="auto"
-                          checked={notificationSettings.auto_reminders}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, auto_reminders: checked }))
-                          }
-                        />
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Automation Settings</h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="auto">Automatic Reminders</Label>
+                          <Switch
+                            id="auto"
+                            checked={notificationSettings.auto_reminders}
+                            onCheckedChange={(checked) =>
+                              setNotificationSettings((prev) => ({ ...prev, auto_reminders: checked }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Default Reminder Timing</Label>
+                          <Select
+                            value={notificationSettings.reminder_timing}
+                            onValueChange={(value) =>
+                              setNotificationSettings((prev) => ({ ...prev, reminder_timing: value }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1h">1 hour before</SelectItem>
+                              <SelectItem value="24h">24 hours before</SelectItem>
+                              <SelectItem value="48h">48 hours before</SelectItem>
+                              <SelectItem value="7d">7 days before</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
+                    </div>
+
+                    <Button className="w-full">Save Settings</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isBulkReminderOpen} onOpenChange={setIsBulkReminderOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-blue-600 hover:bg-blue-700">
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Bulk Reminder
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Send Bulk Reminder</DialogTitle>
+                    <DialogDescription>Send reminders to multiple patients at once</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Default Reminder Timing</Label>
+                        <Label>Reminder Type</Label>
                         <Select
-                          value={notificationSettings.reminder_timing}
-                          onValueChange={(value) =>
-                            setNotificationSettings((prev) => ({ ...prev, reminder_timing: value }))
-                          }
+                          value={bulkReminderData.type}
+                          onValueChange={(value: any) => setBulkReminderData({ ...bulkReminderData, type: value })}
                         >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="1h">1 hour before</SelectItem>
-                            <SelectItem value="24h">24 hours before</SelectItem>
-                            <SelectItem value="48h">48 hours before</SelectItem>
-                            <SelectItem value="7d">7 days before</SelectItem>
+                            <SelectItem value="sms">SMS</SelectItem>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="whatsapp">WhatsApp</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="space-y-2">
+                        <Label>Schedule Time</Label>
+                        <Input
+                          type="datetime-local"
+                          value={bulkReminderData.schedule_time}
+                          onChange={(e) =>
+                            setBulkReminderData({
+                              ...bulkReminderData,
+                              schedule_time: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
                     </div>
-                  </div>
-
-                  <Button className="w-full">Save Settings</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            <Dialog open={isBulkReminderOpen} onOpenChange={setIsBulkReminderOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Bulk Reminder
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Send Bulk Reminder</DialogTitle>
-                  <DialogDescription>Send reminders to multiple patients at once</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Reminder Type</Label>
+                      <Label>Patient Filter</Label>
                       <Select
-                        value={bulkReminderData.type}
-                        onValueChange={(value: any) => setBulkReminderData({ ...bulkReminderData, type: value })}
+                        value={bulkReminderData.patient_filter}
+                        onValueChange={(value) => setBulkReminderData({ ...bulkReminderData, patient_filter: value })}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="sms">SMS</SelectItem>
-                          <SelectItem value="email">Email</SelectItem>
-                          <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                          <SelectItem value="all">All Patients</SelectItem>
+                          <SelectItem value="upcoming">Upcoming Appointments</SelectItem>
+                          <SelectItem value="overdue">Overdue Follow-ups</SelectItem>
+                          <SelectItem value="no_show">Previous No-shows</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Schedule Time</Label>
-                      <Input
-                        type="datetime-local"
-                        value={bulkReminderData.schedule_time}
+                      <Label>Message</Label>
+                      <Textarea
+                        value={bulkReminderData.message}
                         onChange={(e) =>
                           setBulkReminderData({
                             ...bulkReminderData,
-                            schedule_time: e.target.value,
+                            message: e.target.value,
                           })
                         }
+                        placeholder="Enter your reminder message..."
+                        rows={4}
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Patient Filter</Label>
-                    <Select
-                      value={bulkReminderData.patient_filter}
-                      onValueChange={(value) => setBulkReminderData({ ...bulkReminderData, patient_filter: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Patients</SelectItem>
-                        <SelectItem value="upcoming">Upcoming Appointments</SelectItem>
-                        <SelectItem value="overdue">Overdue Follow-ups</SelectItem>
-                        <SelectItem value="no_show">Previous No-shows</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex justify-end gap-3 mt-6">
+                    <Button variant="outline" onClick={() => setIsBulkReminderOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSendBulkReminder}>Schedule Reminders</Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Message</Label>
-                    <Textarea
-                      value={bulkReminderData.message}
-                      onChange={(e) =>
-                        setBulkReminderData({
-                          ...bulkReminderData,
-                          message: e.target.value,
-                        })
-                      }
-                      placeholder="Enter your reminder message..."
-                      rows={4}
-                    />
+                </DialogContent>
+              </Dialog>
+            </div>
+          </motion.div>
+
+          {/* Error State */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-red-50 border border-red-200 rounded-lg p-4"
+            >
+              <div className="flex items-center gap-2 text-red-800">
+                <AlertTriangle className="h-5 w-5" />
+                <span className="font-medium">Unable to load reminders</span>
+              </div>
+              <p className="text-red-600 text-sm mt-1">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refetchReminders}
+                className="mt-2 text-red-700 border-red-300"
+              >
+                Try Again
+              </Button>
+            </motion.div>
+          )}
+
+          {/* Statistics */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-1 md:grid-cols-4 gap-6"
+          >
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-5 w-5 text-orange-600" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Pending</p>
+                    <p className="text-2xl font-bold text-gray-900">{loading ? "..." : pendingReminders.length}</p>
                   </div>
                 </div>
-                <div className="flex justify-end gap-3 mt-6">
-                  <Button variant="outline" onClick={() => setIsBulkReminderOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSendBulkReminder}>Schedule Reminders</Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Delivered</p>
+                    <p className="text-2xl font-bold text-gray-900">{loading ? "..." : deliveredCount}</p>
+                  </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </motion.div>
+              </CardContent>
+            </Card>
 
-        {/* Statistics */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-4 gap-6"
-        >
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <Clock className="h-5 w-5 text-orange-600" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Pending</p>
-                  <p className="text-2xl font-bold text-gray-900">{pendingReminders.length}</p>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-2">
+                  <XCircle className="h-5 w-5 text-red-600" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Failed</p>
+                    <p className="text-2xl font-bold text-gray-900">{loading ? "..." : failedCount}</p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Delivered</p>
-                  <p className="text-2xl font-bold text-gray-900">{deliveredCount}</p>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-2">
+                  <TrendingUp className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {loading
+                        ? "..."
+                        : reminders.length > 0
+                          ? Math.round((deliveredCount / reminders.length) * 100)
+                          : 0}
+                      %
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <XCircle className="h-5 w-5 text-red-600" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Failed</p>
-                  <p className="text-2xl font-bold text-gray-900">{failedCount}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Search and Filters */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="flex flex-col sm:flex-row gap-4"
+          >
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search reminders by patient name or message..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="failed">Failed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="sms">SMS</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="call">Call</SelectItem>
+              </SelectContent>
+            </Select>
+          </motion.div>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Success Rate</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {reminders.length > 0 ? Math.round((deliveredCount / reminders.length) * 100) : 0}%
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          {/* Main Content */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Tabs defaultValue="all" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="all">All Reminders ({filteredReminders.length})</TabsTrigger>
+                <TabsTrigger value="pending">Pending ({pendingReminders.length})</TabsTrigger>
+                <TabsTrigger value="sent">Sent ({sentReminders.length})</TabsTrigger>
+                <TabsTrigger value="analytics">Analytics</TabsTrigger>
+              </TabsList>
 
-        {/* Search and Filters */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex flex-col sm:flex-row gap-4"
-        >
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search reminders by patient name or message..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
-              <SelectItem value="delivered">Delivered</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="sms">SMS</SelectItem>
-              <SelectItem value="email">Email</SelectItem>
-              <SelectItem value="whatsapp">WhatsApp</SelectItem>
-              <SelectItem value="call">Call</SelectItem>
-            </SelectContent>
-          </Select>
-        </motion.div>
-
-        {/* Main Content */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Tabs defaultValue="all" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="all">All Reminders ({filteredReminders.length})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({pendingReminders.length})</TabsTrigger>
-              <TabsTrigger value="sent">Sent ({sentReminders.length})</TabsTrigger>
-              <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="all" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>All Reminders</CardTitle>
-                  <CardDescription>Complete history of patient reminders</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {filteredReminders.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No reminders found</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {filteredReminders.map((reminder, index) => (
-                        <motion.div
-                          key={reminder.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                        >
-                          <div className="flex items-center space-x-4">
+              <TabsContent value="all" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>All Reminders</CardTitle>
+                    <CardDescription>Complete history of patient reminders</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div key={i} className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg">
+                            <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                            <div className="w-16 h-4 bg-gray-200 rounded"></div>
+                            <div className="flex-1 space-y-2">
+                              <div className="w-32 h-4 bg-gray-200 rounded"></div>
+                              <div className="w-48 h-3 bg-gray-200 rounded"></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : filteredReminders.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No reminders found</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {filteredReminders.map((reminder, index) => (
+                          <motion.div
+                            key={reminder.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                          >
+                            <div className="flex items-center space-x-4">
+                              <div className="flex items-center space-x-2">
+                                {getTypeIcon(reminder.reminder_type)}
+                                <Badge variant="outline" className="capitalize">
+                                  {reminder.reminder_type}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="font-medium">{reminder.appointments.patients.full_name}</p>
+                                <p className="text-sm text-gray-600">
+                                  {reminder.message_content || `${reminder.appointments.treatment_type} reminder`}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {reminder.sent_at
+                                    ? `Sent: ${new Date(reminder.sent_at).toLocaleString()}`
+                                    : `Scheduled: ${new Date(reminder.scheduled_for).toLocaleString()}`}
+                                </p>
+                              </div>
+                            </div>
                             <div className="flex items-center space-x-2">
-                              {getTypeIcon(reminder.reminder_type)}
-                              <Badge variant="outline" className="capitalize">
-                                {reminder.reminder_type}
+                              {getStatusIcon(reminder.status)}
+                              <Badge
+                                variant={
+                                  reminder.status === "delivered"
+                                    ? "default"
+                                    : reminder.status === "failed"
+                                      ? "destructive"
+                                      : "secondary"
+                                }
+                              >
+                                {reminder.status}
+                              </Badge>
+                              {reminder.status === "pending" && (
+                                <Button variant="outline" size="sm">
+                                  Send Now
+                                </Button>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="pending" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pending Reminders</CardTitle>
+                    <CardDescription>Reminders scheduled to be sent</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg">
+                            <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                            <div className="w-16 h-4 bg-gray-200 rounded"></div>
+                            <div className="flex-1 space-y-2">
+                              <div className="w-32 h-4 bg-gray-200 rounded"></div>
+                              <div className="w-48 h-3 bg-gray-200 rounded"></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {pendingReminders.map((reminder, index) => (
+                          <motion.div
+                            key={reminder.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                          >
+                            <div className="flex items-center space-x-4">
+                              <div className="flex items-center space-x-2">
+                                {getTypeIcon(reminder.reminder_type)}
+                                <Badge variant="outline" className="capitalize">
+                                  {reminder.reminder_type}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="font-medium">{reminder.appointments.patients.full_name}</p>
+                                <p className="text-sm text-gray-600">{reminder.appointments.treatment_type}</p>
+                                <p className="text-xs text-gray-500">
+                                  Scheduled for: {new Date(reminder.scheduled_for).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Button variant="outline" size="sm">
+                                Edit
+                              </Button>
+                              <Button size="sm">Send Now</Button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="sent" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Sent Reminders</CardTitle>
+                    <CardDescription>History of sent notifications</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg">
+                            <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                            <div className="w-16 h-4 bg-gray-200 rounded"></div>
+                            <div className="flex-1 space-y-2">
+                              <div className="w-32 h-4 bg-gray-200 rounded"></div>
+                              <div className="w-48 h-3 bg-gray-200 rounded"></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sentReminders.map((reminder, index) => (
+                          <motion.div
+                            key={reminder.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="flex items-center justify-between p-4 border rounded-lg"
+                          >
+                            <div className="flex items-center space-x-4">
+                              <div className="flex items-center space-x-2">
+                                {getTypeIcon(reminder.reminder_type)}
+                                <Badge variant="outline" className="capitalize">
+                                  {reminder.reminder_type}
+                                </Badge>
+                              </div>
+                              <div>
+                                <p className="font-medium">{reminder.appointments.patients.full_name}</p>
+                                <p className="text-sm text-gray-600">
+                                  {reminder.message_content || `${reminder.appointments.treatment_type} reminder`}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Sent: {reminder.sent_at ? new Date(reminder.sent_at).toLocaleString() : "Not sent"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {getStatusIcon(reminder.status)}
+                              <Badge
+                                variant={
+                                  reminder.status === "delivered"
+                                    ? "default"
+                                    : reminder.status === "failed"
+                                      ? "destructive"
+                                      : "secondary"
+                                }
+                              >
+                                {reminder.status}
                               </Badge>
                             </div>
-                            <div>
-                              <p className="font-medium">{reminder.appointments.patients.full_name}</p>
-                              <p className="text-sm text-gray-600">
-                                {reminder.message_content || `${reminder.appointments.treatment_type} reminder`}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {reminder.sent_at
-                                  ? `Sent: ${new Date(reminder.sent_at).toLocaleString()}`
-                                  : `Scheduled: ${new Date(reminder.scheduled_for).toLocaleString()}`}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {getStatusIcon(reminder.status)}
-                            <Badge
-                              variant={
-                                reminder.status === "delivered"
-                                  ? "default"
-                                  : reminder.status === "failed"
-                                    ? "destructive"
-                                    : "secondary"
-                              }
-                            >
-                              {reminder.status}
-                            </Badge>
-                            {reminder.status === "pending" && (
-                              <Button variant="outline" size="sm">
-                                Send Now
-                              </Button>
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="pending" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Pending Reminders</CardTitle>
-                  <CardDescription>Reminders scheduled to be sent</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {pendingReminders.map((reminder, index) => (
-                      <motion.div
-                        key={reminder.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.1 }}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                      >
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            {getTypeIcon(reminder.reminder_type)}
-                            <Badge variant="outline" className="capitalize">
-                              {reminder.reminder_type}
-                            </Badge>
-                          </div>
-                          <div>
-                            <p className="font-medium">{reminder.appointments.patients.full_name}</p>
-                            <p className="text-sm text-gray-600">{reminder.appointments.treatment_type}</p>
-                            <p className="text-xs text-gray-500">
-                              Scheduled for: {new Date(reminder.scheduled_for).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Button variant="outline" size="sm">
-                            Edit
-                          </Button>
-                          <Button size="sm">Send Now</Button>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="sent" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sent Reminders</CardTitle>
-                  <CardDescription>History of sent notifications</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {sentReminders.map((reminder, index) => (
-                      <motion.div
-                        key={reminder.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            {getTypeIcon(reminder.reminder_type)}
-                            <Badge variant="outline" className="capitalize">
-                              {reminder.reminder_type}
-                            </Badge>
-                          </div>
-                          <div>
-                            <p className="font-medium">{reminder.appointments.patients.full_name}</p>
-                            <p className="text-sm text-gray-600">
-                              {reminder.message_content || `${reminder.appointments.treatment_type} reminder`}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Sent: {reminder.sent_at ? new Date(reminder.sent_at).toLocaleString() : "Not sent"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(reminder.status)}
-                          <Badge
-                            variant={
-                              reminder.status === "delivered"
-                                ? "default"
-                                : reminder.status === "failed"
-                                  ? "destructive"
-                                  : "secondary"
-                            }
-                          >
-                            {reminder.status}
-                          </Badge>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="analytics" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Delivery Rate</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-green-600">
-                      {reminders.length > 0 ? Math.round((deliveredCount / reminders.length) * 100) : 0}%
-                    </div>
-                    <p className="text-sm text-gray-600">Successfully delivered reminders</p>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
+              </TabsContent>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Response Rate</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-blue-600">78%</div>
-                    <p className="text-sm text-gray-600">Patients responding to reminders</p>
-                  </CardContent>
-                </Card>
+              <TabsContent value="analytics" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Delivery Rate</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-green-600">
+                        {loading
+                          ? "..."
+                          : reminders.length > 0
+                            ? Math.round((deliveredCount / reminders.length) * 100)
+                            : 0}
+                        %
+                      </div>
+                      <p className="text-sm text-gray-600">Successfully delivered reminders</p>
+                    </CardContent>
+                  </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Most Effective Channel</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-purple-600">SMS</div>
-                    <p className="text-sm text-gray-600">Highest engagement rate</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </motion.div>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Response Rate</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-blue-600">{loading ? "..." : "78%"}</div>
+                      <p className="text-sm text-gray-600">Patients responding to reminders</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Most Effective Channel</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-purple-600">{loading ? "..." : "SMS"}</div>
+                      <p className="text-sm text-gray-600">Highest engagement rate</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </motion.div>
+        </div>
       </div>
-    </div>
+    </DashboardWrapper>
   )
 }
