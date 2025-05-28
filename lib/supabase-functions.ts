@@ -299,3 +299,168 @@ export function subscribeToReminders(callback: (payload: any) => void) {
     )
     .subscribe()
 }
+
+// Patient-specific functions
+export async function getPatientAppointments(patientId: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("appointments")
+        .select(`
+          *,
+          profiles!appointments_doctor_id_fkey (
+            first_name,
+            last_name
+          )
+        `)
+        .eq("patient_id", patientId)
+        .order("appointment_date", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching patient appointments:", error)
+        return []
+      }
+
+      return data || []
+    })
+  })
+}
+
+export async function getPatientProfile(userId: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase.from("patients").select("*").eq("user_id", userId).single()
+
+      if (error) {
+        console.error("Error fetching patient profile:", error)
+        return null
+      }
+
+      return data
+    })
+  })
+}
+
+export async function getPatientMedicalRecords(patientId: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("medical_records")
+        .select(`
+          *,
+          appointments (
+            appointment_date,
+            treatment_type
+          )
+        `)
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Error fetching medical records:", error)
+        return []
+      }
+
+      return data || []
+    })
+  })
+}
+
+export async function getPatientReminders(patientId: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("reminders")
+        .select(`
+          *,
+          appointments (
+            appointment_date,
+            treatment_type
+          )
+        `)
+        .eq("patient_id", patientId)
+        .eq("status", "pending")
+        .order("scheduled_for", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching patient reminders:", error)
+        return []
+      }
+
+      return data || []
+    })
+  })
+}
+
+export async function bookAppointment(appointmentData: {
+  patient_id: string
+  doctor_id: string
+  clinic_id: string
+  appointment_date: string
+  treatment_type: string
+  notes?: string
+}) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("appointments")
+        .insert([
+          {
+            ...appointmentData,
+            status: "scheduled",
+            duration_minutes: 30,
+          },
+        ])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    })
+  })
+}
+
+export async function rescheduleAppointment(appointmentId: string, newDate: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("appointments")
+        .update({
+          appointment_date: newDate,
+          status: "rescheduled",
+        })
+        .eq("id", appointmentId)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    })
+  })
+}
+
+export async function cancelAppointment(appointmentId: string, reason?: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("appointments")
+        .update({
+          status: "cancelled",
+          notes: reason ? `Cancelled: ${reason}` : "Cancelled by patient",
+        })
+        .eq("id", appointmentId)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    })
+  })
+}
