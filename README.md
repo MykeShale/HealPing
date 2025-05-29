@@ -23,8 +23,7 @@ This app leverages AI to generate custom messages and uses low-code platforms to
 ---
 
 ## 🎥 Demo
-> [Link to Demo Video or Live Site]  
-> *(Replace with video link or Vercel/Netlify deployment URL)*
+- Click to view the website live [[View live](https://heal-ping.vercel.app/)]  
 
 ---
 
