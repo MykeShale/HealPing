@@ -16,11 +16,10 @@ import {
 import { Calendar, Heart, Bell, FileText, Clock } from "lucide-react"
 import {
   getPatientAppointments,
-  getPatientProfile,
+  getPatientByUserId,
   getPatientMedicalRecords,
   getPatientReminders,
 } from "@/lib/supabase-functions"
-import { useDashboardData } from "@/hooks/use-dashboard-data"
 import Link from "next/link"
 
 interface PatientStats {
@@ -33,32 +32,44 @@ interface PatientStats {
 export function PatientDashboard() {
   const { user, profile, loading: authLoading } = useAuth()
   const [patientProfile, setPatientProfile] = useState<any>(null)
+  const [appointments, setAppointments] = useState<any[]>([])
+  const [medicalRecords, setMedicalRecords] = useState<any[]>([])
+  const [reminders, setReminders] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [showBookingDialog, setShowBookingDialog] = useState(false)
 
-  // Fetch patient-specific data
-  const { data: appointments, loading: appointmentsLoading } = useDashboardData({
-    fetchFunction: () => getPatientAppointments(patientProfile?.id || ""),
-    fallbackData: [],
-    dependencies: [patientProfile?.id],
-  })
-
-  const { data: medicalRecords, loading: recordsLoading } = useDashboardData({
-    fetchFunction: () => getPatientMedicalRecords(patientProfile?.id || ""),
-    fallbackData: [],
-    dependencies: [patientProfile?.id],
-  })
-
-  const { data: reminders, loading: remindersLoading } = useDashboardData({
-    fetchFunction: () => getPatientReminders(patientProfile?.id || ""),
-    fallbackData: [],
-    dependencies: [patientProfile?.id],
-  })
-
-  // Fetch patient profile
+  // Fetch patient data
   useEffect(() => {
-    if (user?.id) {
-      getPatientProfile(user.id).then(setPatientProfile)
+    const fetchPatientData = async () => {
+      if (!user?.id) return
+
+      try {
+        setLoading(true)
+
+        // Get patient profile
+        const patient = await getPatientByUserId(user.id)
+        setPatientProfile(patient)
+
+        if (patient?.id) {
+          // Fetch all patient data
+          const [appointmentsData, recordsData, remindersData] = await Promise.all([
+            getPatientAppointments(patient.id),
+            getPatientMedicalRecords(patient.id),
+            getPatientReminders(patient.id),
+          ])
+
+          setAppointments(appointmentsData)
+          setMedicalRecords(recordsData)
+          setReminders(remindersData)
+        }
+      } catch (error) {
+        console.error("Error fetching patient data:", error)
+      } finally {
+        setLoading(false)
+      }
     }
+
+    fetchPatientData()
   }, [user?.id])
 
   // Calculate dashboard stats
@@ -93,7 +104,7 @@ export function PatientDashboard() {
     })),
   ].slice(0, 3)
 
-  if (authLoading || !patientProfile) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <LoadingSpinner size="lg" text="Loading your dashboard..." />
@@ -118,6 +129,17 @@ export function PatientDashboard() {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
           <p className="text-gray-600">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!patientProfile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Patient Profile Not Found</h2>
+          <p className="text-gray-600">Please contact your healthcare provider to set up your patient profile.</p>
         </div>
       </div>
     )

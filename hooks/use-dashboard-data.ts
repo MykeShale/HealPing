@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 
 interface UseDashboardDataOptions<T> {
@@ -15,7 +15,7 @@ export function useDashboardData<T>({ fetchFunction, fallbackData, dependencies 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
+  const fetchData = async () => {
     if (!profile?.clinic_id) {
       setLoading(false)
       return
@@ -28,25 +28,21 @@ export function useDashboardData<T>({ fetchFunction, fallbackData, dependencies 
       setData(result)
     } catch (err) {
       console.error("Dashboard data fetch error:", err)
-      setError(err instanceof Error ? err.message : "Failed to load data")
-      setData(fallbackData) // Use fallback data on error
+      setError(err instanceof Error ? err.message : "Failed to fetch data")
+      setData(fallbackData)
     } finally {
       setLoading(false)
     }
-  }, [profile?.clinic_id, fetchFunction, fallbackData, ...dependencies])
+  }
 
   useEffect(() => {
     fetchData()
-  }, [fetchData])
-
-  const refetch = useCallback(() => {
-    fetchData()
-  }, [fetchData])
+  }, [profile?.clinic_id, ...dependencies])
 
   return {
     data,
     loading,
     error,
-    refetch,
+    refetch: fetchData,
   }
 }
