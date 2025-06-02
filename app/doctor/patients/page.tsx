@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { DashboardWrapper } from "@/components/ui/dashboard-wrapper"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
-import { getPatients, createPatient } from "@/lib/supabase-functions"
+import { getPatients } from "@/lib/supabase-functions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +19,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -38,6 +37,7 @@ import {
 } from "lucide-react"
 import { motion } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
+import { AddPatientForm } from "@/components/patients/add-patient-form"
 
 interface Patient {
   id: string
@@ -71,52 +71,6 @@ export default function DoctorPatientsPage() {
   const [filterStatus, setFilterStatus] = useState("all")
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
-  const [newPatient, setNewPatient] = useState({
-    full_name: "",
-    phone: "",
-    email: "",
-    date_of_birth: "",
-    medical_history: "",
-    emergency_contact: "",
-    insurance_info: "",
-  })
-
-  const handleAddPatient = async () => {
-    if (!profile?.clinic_id) return
-
-    try {
-      await createPatient({
-        clinic_id: profile.clinic_id,
-        full_name: newPatient.full_name,
-        phone: newPatient.phone,
-        email: newPatient.email || undefined,
-        date_of_birth: newPatient.date_of_birth || undefined,
-      })
-
-      toast({
-        title: "Success",
-        description: "Patient added successfully",
-      })
-
-      setIsAddPatientOpen(false)
-      setNewPatient({
-        full_name: "",
-        phone: "",
-        email: "",
-        date_of_birth: "",
-        medical_history: "",
-        emergency_contact: "",
-        insurance_info: "",
-      })
-      refetch()
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add patient",
-        variant: "destructive",
-      })
-    }
-  }
 
   // Add mock status for demonstration
   const enhancedPatients = patients.map((patient) => ({
@@ -197,66 +151,17 @@ export default function DoctorPatientsPage() {
                     Add Patient
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Add New Patient</DialogTitle>
                     <DialogDescription>Enter patient information to add them to your practice</DialogDescription>
                   </DialogHeader>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="full_name">Full Name *</Label>
-                      <Input
-                        id="full_name"
-                        value={newPatient.full_name}
-                        onChange={(e) => setNewPatient({ ...newPatient, full_name: e.target.value })}
-                        placeholder="John Doe"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number *</Label>
-                      <Input
-                        id="phone"
-                        value={newPatient.phone}
-                        onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                        placeholder="+1-555-0123"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={newPatient.email}
-                        onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
-                        placeholder="john@example.com"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="date_of_birth">Date of Birth</Label>
-                      <Input
-                        id="date_of_birth"
-                        type="date"
-                        value={newPatient.date_of_birth}
-                        onChange={(e) => setNewPatient({ ...newPatient, date_of_birth: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="medical_history">Medical History</Label>
-                      <Textarea
-                        id="medical_history"
-                        value={newPatient.medical_history}
-                        onChange={(e) => setNewPatient({ ...newPatient, medical_history: e.target.value })}
-                        placeholder="Previous conditions, allergies, medications..."
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-3 mt-6">
-                    <Button variant="outline" onClick={() => setIsAddPatientOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleAddPatient}>Add Patient</Button>
-                  </div>
+                  <AddPatientForm
+                    onSuccess={() => {
+                      setIsAddPatientOpen(false)
+                      refetch()
+                    }}
+                  />
                 </DialogContent>
               </Dialog>
             </div>
