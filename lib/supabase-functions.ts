@@ -31,6 +31,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries: number = MAX_RETRI
   throw lastError!
 }
 
+// Dashboard statistics for doctors
 export async function getDashboardStats(clinicId: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
@@ -69,12 +70,11 @@ export async function getDashboardStats(clinicId: string) {
           total_patients: patientsCount || 0,
           today_appointments: todayAppointments || 0,
           pending_reminders: pendingReminders || 0,
-          upcoming_followups: 0, // Will be calculated based on appointments
+          upcoming_followups: 0,
           overdue_followups: 0,
         }
       } catch (error) {
         console.error("Error in getDashboardStats:", error)
-        // Return fallback data instead of throwing
         return {
           total_patients: 0,
           today_appointments: 0,
@@ -96,11 +96,24 @@ export async function createPatient(patientData: {
   date_of_birth?: string
   gender?: string
   address?: string
+  user_id?: string
 }) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
-      const { data, error } = await supabase.from("patients").insert([patientData]).select().single()
+      const { data, error } = await supabase
+        .from("patients")
+        .insert([
+          {
+            ...patientData,
+            medical_history: {},
+            emergency_contact: {},
+            insurance_info: {},
+            communication_preferences: { sms: true, email: true, whatsapp: false },
+          },
+        ])
+        .select()
+        .single()
 
       if (error) throw error
       return data
@@ -120,7 +133,7 @@ export async function getPatients(clinicId: string) {
 
       if (error) {
         console.error("Error fetching patients:", error)
-        return [] // Return empty array instead of throwing
+        return []
       }
 
       return data || []
@@ -177,6 +190,10 @@ export async function getAppointments(clinicId: string) {
             full_name,
             phone,
             email
+          ),
+          profiles!appointments_doctor_id_fkey (
+            first_name,
+            last_name
           )
         `)
         .eq("clinic_id", clinicId)
@@ -184,120 +201,12 @@ export async function getAppointments(clinicId: string) {
 
       if (error) {
         console.error("Error fetching appointments:", error)
-        return [] // Return empty array instead of throwing
+        return []
       }
 
       return data || []
     })
   })
-}
-
-// Reminder management
-export async function createReminders(appointmentId: string, reminderTypes: string[] = ["sms", "email"]) {
-  return withRetry(async () => {
-    return withTimeout(async () => {
-      const supabase = getSupabase()
-
-      // Get appointment details first
-      const { data: appointment, error: appointmentError } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("id", appointmentId)
-        .single()
-
-      if (appointmentError) throw appointmentError
-
-      // Create reminders for each type
-      const reminderPromises = reminderTypes.map((type) => {
-        const scheduledFor = new Date(appointment.appointment_date)
-        scheduledFor.setHours(scheduledFor.getHours() - 24) // 24 hours before
-
-        return supabase.from("reminders").insert([
-          {
-            appointment_id: appointmentId,
-            clinic_id: appointment.clinic_id,
-            reminder_type: type,
-            scheduled_for: scheduledFor.toISOString(),
-            status: "pending",
-          },
-        ])
-      })
-
-      const results = await Promise.all(reminderPromises)
-      const errors = results.filter((result) => result.error)
-
-      if (errors.length > 0) {
-        throw new Error(`Failed to create some reminders: ${errors.map((e) => e.error?.message).join(", ")}`)
-      }
-
-      return results.flatMap((result) => result.data)
-    })
-  })
-}
-
-export async function getReminders(clinicId: string) {
-  return withRetry(async () => {
-    return withTimeout(async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("reminders")
-        .select(`
-          *,
-          appointments (
-            appointment_date,
-            treatment_type,
-            patients (
-              full_name,
-              phone,
-              email
-            )
-          )
-        `)
-        .eq("clinic_id", clinicId)
-        .order("scheduled_for", { ascending: false })
-
-      if (error) {
-        console.error("Error fetching reminders:", error)
-        return [] // Return empty array instead of throwing
-      }
-
-      return data || []
-    })
-  })
-}
-
-// Real-time subscriptions
-export function subscribeToAppointments(clinicId: string, callback: (payload: any) => void) {
-  const supabase = getSupabase()
-  return supabase
-    .channel("appointments")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "appointments",
-        filter: `clinic_id=eq.${clinicId}`,
-      },
-      callback,
-    )
-    .subscribe()
-}
-
-export function subscribeToReminders(callback: (payload: any) => void) {
-  const supabase = getSupabase()
-  return supabase
-    .channel("reminders")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "reminders",
-      },
-      callback,
-    )
-    .subscribe()
 }
 
 // Patient-specific functions
@@ -312,6 +221,10 @@ export async function getPatientAppointments(patientId: string) {
           profiles!appointments_doctor_id_fkey (
             first_name,
             last_name
+          ),
+          clinics (
+            name,
+            address
           )
         `)
         .eq("patient_id", patientId)
@@ -327,7 +240,7 @@ export async function getPatientAppointments(patientId: string) {
   })
 }
 
-export async function getPatientProfile(userId: string) {
+export async function getPatientByUserId(userId: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
@@ -396,35 +309,6 @@ export async function getPatientReminders(patientId: string) {
   })
 }
 
-export async function bookAppointment(appointmentData: {
-  patient_id: string
-  doctor_id: string
-  clinic_id: string
-  appointment_date: string
-  treatment_type: string
-  notes?: string
-}) {
-  return withRetry(async () => {
-    return withTimeout(async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("appointments")
-        .insert([
-          {
-            ...appointmentData,
-            status: "scheduled",
-            duration_minutes: 30,
-          },
-        ])
-        .select()
-        .single()
-
-      if (error) throw error
-      return data
-    })
-  })
-}
-
 export async function rescheduleAppointment(appointmentId: string, newDate: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
@@ -434,6 +318,7 @@ export async function rescheduleAppointment(appointmentId: string, newDate: stri
         .update({
           appointment_date: newDate,
           status: "rescheduled",
+          updated_at: new Date().toISOString(),
         })
         .eq("id", appointmentId)
         .select()
@@ -454,6 +339,7 @@ export async function cancelAppointment(appointmentId: string, reason?: string) 
         .update({
           status: "cancelled",
           notes: reason ? `Cancelled: ${reason}` : "Cancelled by patient",
+          updated_at: new Date().toISOString(),
         })
         .eq("id", appointmentId)
         .select()
@@ -463,4 +349,114 @@ export async function cancelAppointment(appointmentId: string, reason?: string) 
       return data
     })
   })
+}
+
+// Reminder management
+export async function createReminders(appointmentId: string, reminderTypes: string[] = ["sms", "email"]) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+
+      // Get appointment details first
+      const { data: appointment, error: appointmentError } = await supabase
+        .from("appointments")
+        .select("*")
+        .eq("id", appointmentId)
+        .single()
+
+      if (appointmentError) throw appointmentError
+
+      // Create reminders for each type
+      const reminderPromises = reminderTypes.map((type) => {
+        const scheduledFor = new Date(appointment.appointment_date)
+        scheduledFor.setHours(scheduledFor.getHours() - 24) // 24 hours before
+
+        return supabase.from("reminders").insert([
+          {
+            appointment_id: appointmentId,
+            patient_id: appointment.patient_id,
+            clinic_id: appointment.clinic_id,
+            reminder_type: type,
+            scheduled_for: scheduledFor.toISOString(),
+            status: "pending",
+            message_content: `Reminder: You have an appointment tomorrow at ${new Date(appointment.appointment_date).toLocaleString()}`,
+          },
+        ])
+      })
+
+      const results = await Promise.all(reminderPromises)
+      const errors = results.filter((result) => result.error)
+
+      if (errors.length > 0) {
+        throw new Error(`Failed to create some reminders: ${errors.map((e) => e.error?.message).join(", ")}`)
+      }
+
+      return results.flatMap((result) => result.data)
+    })
+  })
+}
+
+export async function getReminders(clinicId: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("reminders")
+        .select(`
+          *,
+          appointments (
+            appointment_date,
+            treatment_type
+          ),
+          patients (
+            full_name,
+            phone,
+            email
+          )
+        `)
+        .eq("clinic_id", clinicId)
+        .order("scheduled_for", { ascending: false })
+
+      if (error) {
+        console.error("Error fetching reminders:", error)
+        return []
+      }
+
+      return data || []
+    })
+  })
+}
+
+// Real-time subscriptions
+export function subscribeToAppointments(clinicId: string, callback: (payload: any) => void) {
+  const supabase = getSupabase()
+  return supabase
+    .channel("appointments")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "appointments",
+        filter: `clinic_id=eq.${clinicId}`,
+      },
+      callback,
+    )
+    .subscribe()
+}
+
+export function subscribeToReminders(callback: (payload: any) => void) {
+  const supabase = getSupabase()
+  return supabase
+    .channel("reminders")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "reminders",
+      },
+      callback,
+    )
+    .subscribe()
 }
