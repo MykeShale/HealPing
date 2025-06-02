@@ -1,15 +1,21 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { DashboardWrapper } from "@/components/ui/dashboard-wrapper"
-import { useDashboardData } from "@/hooks/use-dashboard-data"
-import { getAppointments, getPatients } from "@/lib/supabase-functions"
-import { Calendar, dateFnsLocalizer, type View } from "react-big-calendar"
-import { format, parse, startOfWeek, getDay } from "date-fns"
-import { enUS } from "date-fns/locale"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useState } from "react";
+import { DashboardWrapper } from "@/components/ui/dashboard-wrapper";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
+import { getAppointments, getPatients } from "@/lib/supabase-functions";
+import { Calendar, dateFnsLocalizer, type View } from "react-big-calendar";
+import { format, parse, startOfWeek, getDay } from "date-fns";
+import { enUS } from "date-fns/locale";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -17,9 +23,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/lib/auth-context"
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/lib/auth-context";
 import {
   CalendarDays,
   Clock,
@@ -32,11 +38,11 @@ import {
   MessageSquare,
   Mail,
   AlertTriangle,
-} from "lucide-react"
-import { motion } from "framer-motion"
-import { useToast } from "@/hooks/use-toast"
-import "react-big-calendar/lib/css/react-big-calendar.css"
-import { BookAppointmentForm } from "@/components/appointments/book-appointment-form"
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { useToast } from "@/hooks/use-toast";
+import "react-big-calendar/lib/css/react-big-calendar.css";
+import { BookAppointmentForm } from "@/components/appointments/book-appointment-form";
 
 const localizer = dateFnsLocalizer({
   format,
@@ -46,33 +52,33 @@ const localizer = dateFnsLocalizer({
   locales: {
     "en-US": enUS,
   },
-})
+});
 
 interface CalendarEvent {
-  id: string
-  title: string
-  start: Date
-  end: Date
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
   resource: {
-    patient: any
-    status: string
-    treatment_type: string
-    notes: string
-    phone: string
-  }
+    patient: any;
+    status: string;
+    treatment_type: string;
+    notes: string;
+    phone: string;
+  };
 }
 
 interface NewAppointment {
-  patient_id: string
-  appointment_date: string
-  treatment_type: string
-  duration_minutes: number
-  notes: string
+  patient_id: string;
+  appointment_date: string;
+  treatment_type: string;
+  duration_minutes: number;
+  notes: string;
 }
 
 export default function DoctorAppointmentsPage() {
-  const { profile } = useAuth()
-  const { toast } = useToast()
+  const { profile } = useAuth();
+  const { toast } = useToast();
 
   const {
     data: appointments,
@@ -82,7 +88,7 @@ export default function DoctorAppointmentsPage() {
   } = useDashboardData({
     fetchFunction: getAppointments,
     fallbackData: [],
-  })
+  });
 
   const {
     data: patients,
@@ -91,20 +97,27 @@ export default function DoctorAppointmentsPage() {
   } = useDashboardData({
     fetchFunction: getPatients,
     fallbackData: [],
-  })
+  });
 
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
-  const [view, setView] = useState<View>("week")
-  const [date, setDate] = useState(new Date())
-  const [isScheduleOpen, setIsScheduleOpen] = useState(false)
-  const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date } | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
+    null
+  );
+  const [view, setView] = useState<View>("week");
+  const [date, setDate] = useState(new Date());
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    start: Date;
+    end: Date;
+  } | null>(null);
 
-  const loading = appointmentsLoading || patientsLoading
-  const error = appointmentsError || patientsError
+  const loading = appointmentsLoading || patientsLoading;
+  const error = appointmentsError || patientsError;
 
   const events: CalendarEvent[] = appointments.map((apt) => ({
     id: apt.id,
-    title: `${apt.patients?.full_name} - ${apt.treatment_type || "Appointment"}`,
+    title: `${apt.patients?.full_name} - ${
+      apt.treatment_type || "Appointment"
+    }`,
     start: new Date(apt.appointment_date),
     end: new Date(new Date(apt.appointment_date).getTime() + 30 * 60000),
     resource: {
@@ -114,28 +127,28 @@ export default function DoctorAppointmentsPage() {
       notes: apt.notes,
       phone: apt.patients?.phone || "",
     },
-  }))
+  }));
 
   const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
-    setSelectedSlot({ start, end })
-    setIsScheduleOpen(true)
-  }
+    setSelectedSlot({ start, end });
+    setIsScheduleOpen(true);
+  };
 
   const eventStyleGetter = (event: CalendarEvent) => {
-    let backgroundColor = "#3174ad"
+    let backgroundColor = "#3174ad";
 
     switch (event.resource.status) {
       case "completed":
-        backgroundColor = "#10b981"
-        break
+        backgroundColor = "#10b981";
+        break;
       case "cancelled":
-        backgroundColor = "#ef4444"
-        break
+        backgroundColor = "#ef4444";
+        break;
       case "no_show":
-        backgroundColor = "#f59e0b"
-        break
+        backgroundColor = "#f59e0b";
+        break;
       default:
-        backgroundColor = "#3b82f6"
+        backgroundColor = "#3b82f6";
     }
 
     return {
@@ -147,21 +160,28 @@ export default function DoctorAppointmentsPage() {
         border: "0px",
         display: "block",
       },
-    }
-  }
+    };
+  };
 
   const todayAppointments = events.filter(
-    (event) => format(event.start, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd"),
-  )
+    (event) =>
+      format(event.start, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
+  );
 
   const upcomingAppointments = events
     .filter(
-      (event) => event.start > new Date() && format(event.start, "yyyy-MM-dd") !== format(new Date(), "yyyy-MM-dd"),
+      (event) =>
+        event.start > new Date() &&
+        format(event.start, "yyyy-MM-dd") !== format(new Date(), "yyyy-MM-dd")
     )
-    .slice(0, 5)
+    .slice(0, 5);
 
   return (
-    <DashboardWrapper requiredRole="doctor" title="Appointment Management" description="Loading your appointments...">
+    <DashboardWrapper
+      requiredRole="doctor"
+      title="Appointment Management"
+      description="Loading your appointments..."
+    >
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
@@ -171,8 +191,12 @@ export default function DoctorAppointmentsPage() {
             className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
           >
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Appointment Management</h1>
-              <p className="text-gray-600">Manage your practice schedule and patient appointments</p>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Appointment Management
+              </h1>
+              <p className="text-gray-600">
+                Manage your practice schedule and patient appointments
+              </p>
             </div>
             <Dialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
               <DialogTrigger asChild>
@@ -186,13 +210,13 @@ export default function DoctorAppointmentsPage() {
                   patients={patients}
                   selectedSlot={selectedSlot}
                   onSuccess={() => {
-                    setIsScheduleOpen(false)
-                    setSelectedSlot(null)
-                    refetchAppointments()
+                    setIsScheduleOpen(false);
+                    setSelectedSlot(null);
+                    refetchAppointments();
                   }}
                   onCancel={() => {
-                    setIsScheduleOpen(false)
-                    setSelectedSlot(null)
+                    setIsScheduleOpen(false);
+                    setSelectedSlot(null);
                   }}
                 />
               </DialogContent>
@@ -235,7 +259,9 @@ export default function DoctorAppointmentsPage() {
                   <CalendarDays className="h-5 w-5 text-blue-600" />
                   <div>
                     <p className="text-sm font-medium text-gray-600">Today</p>
-                    <p className="text-2xl font-bold text-gray-900">{loading ? "..." : todayAppointments.length}</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {loading ? "..." : todayAppointments.length}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -246,8 +272,12 @@ export default function DoctorAppointmentsPage() {
                 <div className="flex items-center space-x-2">
                   <Clock className="h-5 w-5 text-green-600" />
                   <div>
-                    <p className="text-sm font-medium text-gray-600">This Week</p>
-                    <p className="text-2xl font-bold text-gray-900">{loading ? "..." : events.length}</p>
+                    <p className="text-sm font-medium text-gray-600">
+                      This Week
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {loading ? "..." : events.length}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -258,9 +288,15 @@ export default function DoctorAppointmentsPage() {
                 <div className="flex items-center space-x-2">
                   <CheckCircle className="h-5 w-5 text-green-600" />
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Completed</p>
+                    <p className="text-sm font-medium text-gray-600">
+                      Completed
+                    </p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {loading ? "..." : events.filter((e) => e.resource.status === "completed").length}
+                      {loading
+                        ? "..."
+                        : events.filter(
+                            (e) => e.resource.status === "completed"
+                          ).length}
                     </p>
                   </div>
                 </div>
@@ -272,8 +308,12 @@ export default function DoctorAppointmentsPage() {
                 <div className="flex items-center space-x-2">
                   <User className="h-5 w-5 text-purple-600" />
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Patients</p>
-                    <p className="text-2xl font-bold text-gray-900">{loading ? "..." : patients.length}</p>
+                    <p className="text-sm font-medium text-gray-600">
+                      Patients
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {loading ? "..." : patients.length}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -281,7 +321,11 @@ export default function DoctorAppointmentsPage() {
           </motion.div>
 
           {/* Main Content */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
             <Tabs defaultValue="calendar" className="space-y-6">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="calendar">Calendar View</TabsTrigger>
@@ -321,8 +365,12 @@ export default function DoctorAppointmentsPage() {
                           components={{
                             event: ({ event }) => (
                               <div className="p-1">
-                                <div className="font-medium text-xs">{event.resource.patient?.full_name}</div>
-                                <div className="text-xs opacity-75">{event.resource.treatment_type}</div>
+                                <div className="font-medium text-xs">
+                                  {event.resource.patient?.full_name}
+                                </div>
+                                <div className="text-xs opacity-75">
+                                  {event.resource.treatment_type}
+                                </div>
                               </div>
                             ),
                           }}
@@ -337,13 +385,18 @@ export default function DoctorAppointmentsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Today's Appointments</CardTitle>
-                    <CardDescription>{format(new Date(), "EEEE, MMMM do, yyyy")}</CardDescription>
+                    <CardDescription>
+                      {format(new Date(), "EEEE, MMMM do, yyyy")}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {loading ? (
                       <div className="space-y-4">
                         {[1, 2, 3].map((i) => (
-                          <div key={i} className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg">
+                          <div
+                            key={i}
+                            className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg"
+                          >
                             <div className="w-20 h-4 bg-gray-200 rounded"></div>
                             <div className="flex-1 space-y-2">
                               <div className="w-32 h-4 bg-gray-200 rounded"></div>
@@ -369,9 +422,15 @@ export default function DoctorAppointmentsPage() {
                                 {format(appointment.start, "HH:mm")}
                               </div>
                               <div>
-                                <p className="font-medium">{appointment.resource.patient?.full_name}</p>
-                                <p className="text-sm text-gray-600">{appointment.resource.treatment_type}</p>
-                                <p className="text-xs text-gray-500">{appointment.resource.phone}</p>
+                                <p className="font-medium">
+                                  {appointment.resource.patient?.full_name}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {appointment.resource.treatment_type}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {appointment.resource.phone}
+                                </p>
                               </div>
                             </div>
                             <div className="flex items-center space-x-2">
@@ -379,9 +438,10 @@ export default function DoctorAppointmentsPage() {
                                 variant={
                                   appointment.resource.status === "completed"
                                     ? "default"
-                                    : appointment.resource.status === "cancelled"
-                                      ? "destructive"
-                                      : "secondary"
+                                    : appointment.resource.status ===
+                                      "cancelled"
+                                    ? "destructive"
+                                    : "secondary"
                                 }
                               >
                                 {appointment.resource.status}
@@ -410,13 +470,18 @@ export default function DoctorAppointmentsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Upcoming Appointments</CardTitle>
-                    <CardDescription>Next appointments in your schedule</CardDescription>
+                    <CardDescription>
+                      Next appointments in your schedule
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {loading ? (
                       <div className="space-y-4">
                         {[1, 2, 3].map((i) => (
-                          <div key={i} className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg">
+                          <div
+                            key={i}
+                            className="animate-pulse flex items-center space-x-4 p-4 border rounded-lg"
+                          >
                             <div className="w-16 h-8 bg-gray-200 rounded"></div>
                             <div className="flex-1 space-y-2">
                               <div className="w-32 h-4 bg-gray-200 rounded"></div>
@@ -428,19 +493,28 @@ export default function DoctorAppointmentsPage() {
                     ) : (
                       <div className="space-y-4">
                         {upcomingAppointments.map((appointment) => (
-                          <div key={appointment.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div
+                            key={appointment.id}
+                            className="flex items-center justify-between p-4 border rounded-lg"
+                          >
                             <div className="flex items-center space-x-4">
                               <div className="text-sm font-medium text-gray-600">
                                 <div>{format(appointment.start, "MMM dd")}</div>
                                 <div>{format(appointment.start, "HH:mm")}</div>
                               </div>
                               <div>
-                                <p className="font-medium">{appointment.resource.patient?.full_name}</p>
-                                <p className="text-sm text-gray-600">{appointment.resource.treatment_type}</p>
+                                <p className="font-medium">
+                                  {appointment.resource.patient?.full_name}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {appointment.resource.treatment_type}
+                                </p>
                               </div>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <Badge variant="outline">{appointment.resource.status}</Badge>
+                              <Badge variant="outline">
+                                {appointment.resource.status}
+                              </Badge>
                               <Button variant="ghost" size="sm">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
@@ -455,35 +529,51 @@ export default function DoctorAppointmentsPage() {
 
               {/* Event Details Modal */}
               {selectedEvent && (
-                <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+                <Dialog
+                  open={!!selectedEvent}
+                  onOpenChange={() => setSelectedEvent(null)}
+                >
                   <DialogContent className="max-w-2xl">
                     <DialogHeader>
                       <DialogTitle>Appointment Details</DialogTitle>
                       <DialogDescription>
-                        {format(selectedEvent.start, "EEEE, MMMM do, yyyy 'at' h:mm a")}
+                        {format(
+                          selectedEvent.start,
+                          "EEEE, MMMM do, yyyy 'at' h:mm a"
+                        )}
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <h4 className="font-medium text-gray-900 mb-2">Patient Information</h4>
+                          <h4 className="font-medium text-gray-900 mb-2">
+                            Patient Information
+                          </h4>
                           <div className="space-y-2">
                             <p className="text-gray-600">
-                              <strong>Name:</strong> {selectedEvent.resource.patient?.full_name}
+                              <strong>Name:</strong>{" "}
+                              {selectedEvent.resource.patient?.full_name}
                             </p>
                             <p className="text-gray-600">
-                              <strong>Phone:</strong> {selectedEvent.resource.phone}
+                              <strong>Phone:</strong>{" "}
+                              {selectedEvent.resource.phone}
                             </p>
                             <p className="text-gray-600">
-                              <strong>Email:</strong> {selectedEvent.resource.patient?.email || "Not provided"}
+                              <strong>Email:</strong>{" "}
+                              {selectedEvent.resource.patient?.email ||
+                                "Not provided"}
                             </p>
                           </div>
                         </div>
                         <div>
-                          <h4 className="font-medium text-gray-900 mb-2">Appointment Details</h4>
+                          <h4 className="font-medium text-gray-900 mb-2">
+                            Appointment Details
+                          </h4>
                           <div className="space-y-2">
                             <p className="text-gray-600">
-                              <strong>Type:</strong> {selectedEvent.resource.treatment_type || "General Consultation"}
+                              <strong>Type:</strong>{" "}
+                              {selectedEvent.resource.treatment_type ||
+                                "General Consultation"}
                             </p>
                             <p className="text-gray-600">
                               <strong>Duration:</strong> 30 minutes
@@ -494,9 +584,10 @@ export default function DoctorAppointmentsPage() {
                                 variant={
                                   selectedEvent.resource.status === "completed"
                                     ? "default"
-                                    : selectedEvent.resource.status === "cancelled"
-                                      ? "destructive"
-                                      : "secondary"
+                                    : selectedEvent.resource.status ===
+                                      "cancelled"
+                                    ? "destructive"
+                                    : "secondary"
                                 }
                               >
                                 {selectedEvent.resource.status}
@@ -508,8 +599,12 @@ export default function DoctorAppointmentsPage() {
 
                       {selectedEvent.resource.notes && (
                         <div>
-                          <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
-                          <p className="text-gray-600 bg-gray-50 p-3 rounded-lg">{selectedEvent.resource.notes}</p>
+                          <h4 className="font-medium text-gray-900 mb-2">
+                            Notes
+                          </h4>
+                          <p className="text-gray-600 bg-gray-50 p-3 rounded-lg">
+                            {selectedEvent.resource.notes}
+                          </p>
                         </div>
                       )}
 
@@ -539,11 +634,10 @@ export default function DoctorAppointmentsPage() {
                   </DialogContent>
                 </Dialog>
               )}
-            </TabsContent>
             </Tabs>
           </motion.div>
         </div>
       </div>
-  </DashboardWrapper>
-  )
+    </DashboardWrapper>
+  );
 }
