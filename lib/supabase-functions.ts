@@ -66,12 +66,32 @@ export async function getDashboardStats(clinicId: string) {
 
         if (remindersError) throw remindersError
 
+        // Get upcoming follow-ups (appointments with follow_up_date in the future)
+        const { count: upcomingFollowups, error: followupsError } = await supabase
+          .from("appointments")
+          .select("*", { count: "exact", head: true })
+          .eq("clinic_id", clinicId)
+          .not("follow_up_date", "is", null)
+          .gte("follow_up_date", new Date().toISOString())
+
+        if (followupsError) throw followupsError
+
+        // Get overdue follow-ups
+        const { count: overdueFollowups, error: overdueError } = await supabase
+          .from("appointments")
+          .select("*", { count: "exact", head: true })
+          .eq("clinic_id", clinicId)
+          .not("follow_up_date", "is", null)
+          .lt("follow_up_date", new Date().toISOString())
+
+        if (overdueError) throw overdueError
+
         return {
           total_patients: patientsCount || 0,
           today_appointments: todayAppointments || 0,
           pending_reminders: pendingReminders || 0,
-          upcoming_followups: 0,
-          overdue_followups: 0,
+          upcoming_followups: upcomingFollowups || 0,
+          overdue_followups: overdueFollowups || 0,
         }
       } catch (error) {
         console.error("Error in getDashboardStats:", error)
@@ -97,23 +117,36 @@ export async function createPatient(patientData: {
   gender?: string
   address?: string
   user_id?: string
+  medical_history?: any
+  emergency_contact?: any
+  insurance_info?: any
+  communication_preferences?: any
 }) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("patients")
-        .insert([
-          {
-            ...patientData,
-            medical_history: {},
-            emergency_contact: {},
-            insurance_info: {},
-            communication_preferences: { sms: true, email: true, whatsapp: false },
-          },
-        ])
-        .select()
-        .single()
+
+      // Ensure proper data structure
+      const insertData = {
+        clinic_id: patientData.clinic_id,
+        full_name: patientData.full_name,
+        phone: patientData.phone,
+        email: patientData.email || null,
+        date_of_birth: patientData.date_of_birth || null,
+        gender: patientData.gender || null,
+        address: patientData.address || null,
+        user_id: patientData.user_id || null,
+        medical_history: patientData.medical_history || {},
+        emergency_contact: patientData.emergency_contact || {},
+        insurance_info: patientData.insurance_info || {},
+        communication_preferences: patientData.communication_preferences || {
+          sms: true,
+          email: !!patientData.email,
+          whatsapp: false,
+        },
+      }
+
+      const { data, error } = await supabase.from("patients").insert([insertData]).select().single()
 
       if (error) throw error
       return data

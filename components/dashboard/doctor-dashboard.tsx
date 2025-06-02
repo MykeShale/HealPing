@@ -67,6 +67,11 @@ export function DoctorDashboard() {
     },
   ])
 
+  // Add a refresh function that can be called from child components
+  const refreshDashboard = () => {
+    refetch()
+  }
+
   return (
     <DashboardWrapper requiredRole="doctor" title="Doctor Dashboard" description="Loading your practice overview...">
       <div className="min-h-screen bg-gray-50 p-6">
@@ -237,7 +242,7 @@ export function DoctorDashboard() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <Button className="w-full justify-start" variant="outline" asChild>
-                        <Link href="/doctor/appointments">
+                        <Link href="/doctor/appointments" onClick={() => refreshDashboard()}>
                           <Calendar className="mr-2 h-4 w-4" />
                           Schedule New Appointment
                         </Link>
