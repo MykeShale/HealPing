@@ -3,17 +3,13 @@
 import { useState } from "react"
 import { DashboardWrapper } from "@/components/ui/dashboard-wrapper"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
-import { getAppointments, getPatients, scheduleAppointment } from "@/lib/supabase-functions"
+import { getAppointments, getPatients } from "@/lib/supabase-functions"
 import { Calendar, dateFnsLocalizer, type View } from "react-big-calendar"
 import { format, parse, startOfWeek, getDay } from "date-fns"
 import { enUS } from "date-fns/locale"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -40,6 +36,7 @@ import {
 import { motion } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
 import "react-big-calendar/lib/css/react-big-calendar.css"
+import { BookAppointmentForm } from "@/components/appointments/book-appointment-form"
 
 const localizer = dateFnsLocalizer({
   format,
@@ -101,13 +98,6 @@ export default function DoctorAppointmentsPage() {
   const [date, setDate] = useState(new Date())
   const [isScheduleOpen, setIsScheduleOpen] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date } | null>(null)
-  const [newAppointment, setNewAppointment] = useState<NewAppointment>({
-    patient_id: "",
-    appointment_date: "",
-    treatment_type: "",
-    duration_minutes: 30,
-    notes: "",
-  })
 
   const loading = appointmentsLoading || patientsLoading
   const error = appointmentsError || patientsError
@@ -128,48 +118,7 @@ export default function DoctorAppointmentsPage() {
 
   const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
     setSelectedSlot({ start, end })
-    setNewAppointment({
-      ...newAppointment,
-      appointment_date: start.toISOString(),
-    })
     setIsScheduleOpen(true)
-  }
-
-  const handleScheduleAppointment = async () => {
-    if (!profile?.id || !newAppointment.patient_id) return
-
-    try {
-      await scheduleAppointment({
-        patient_id: newAppointment.patient_id,
-        doctor_id: profile.id,
-        clinic_id: profile.clinic_id!,
-        appointment_date: newAppointment.appointment_date,
-        duration_minutes: newAppointment.duration_minutes,
-        treatment_type: newAppointment.treatment_type,
-        notes: newAppointment.notes,
-      })
-
-      toast({
-        title: "Success",
-        description: "Appointment scheduled successfully",
-      })
-
-      setIsScheduleOpen(false)
-      setNewAppointment({
-        patient_id: "",
-        appointment_date: "",
-        treatment_type: "",
-        duration_minutes: 30,
-        notes: "",
-      })
-      refetchAppointments()
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to schedule appointment",
-        variant: "destructive",
-      })
-    }
   }
 
   const eventStyleGetter = (event: CalendarEvent) => {
@@ -232,103 +181,20 @@ export default function DoctorAppointmentsPage() {
                   Schedule Appointment
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Schedule New Appointment</DialogTitle>
-                  <DialogDescription>Book an appointment for a patient</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Patient *</Label>
-                      <Select
-                        value={newAppointment.patient_id}
-                        onValueChange={(value) => setNewAppointment({ ...newAppointment, patient_id: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select patient" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {patients.map((patient) => (
-                            <SelectItem key={patient.id} value={patient.id}>
-                              {patient.full_name} - {patient.phone}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Date & Time *</Label>
-                      <Input
-                        type="datetime-local"
-                        value={
-                          newAppointment.appointment_date
-                            ? format(new Date(newAppointment.appointment_date), "yyyy-MM-dd'T'HH:mm")
-                            : ""
-                        }
-                        onChange={(e) =>
-                          setNewAppointment({
-                            ...newAppointment,
-                            appointment_date: new Date(e.target.value).toISOString(),
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Treatment Type</Label>
-                      <Select
-                        value={newAppointment.treatment_type}
-                        onValueChange={(value) => setNewAppointment({ ...newAppointment, treatment_type: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select treatment type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="consultation">Consultation</SelectItem>
-                          <SelectItem value="follow-up">Follow-up</SelectItem>
-                          <SelectItem value="check-up">Check-up</SelectItem>
-                          <SelectItem value="procedure">Procedure</SelectItem>
-                          <SelectItem value="emergency">Emergency</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Duration (minutes)</Label>
-                      <Select
-                        value={newAppointment.duration_minutes.toString()}
-                        onValueChange={(value) =>
-                          setNewAppointment({ ...newAppointment, duration_minutes: Number.parseInt(value) })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15">15 minutes</SelectItem>
-                          <SelectItem value="30">30 minutes</SelectItem>
-                          <SelectItem value="45">45 minutes</SelectItem>
-                          <SelectItem value="60">1 hour</SelectItem>
-                          <SelectItem value="90">1.5 hours</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Notes</Label>
-                    <Textarea
-                      value={newAppointment.notes}
-                      onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
-                      placeholder="Additional notes or instructions..."
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-3 mt-6">
-                  <Button variant="outline" onClick={() => setIsScheduleOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleScheduleAppointment}>Schedule Appointment</Button>
-                </div>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <BookAppointmentForm
+                  patients={patients}
+                  selectedSlot={selectedSlot}
+                  onSuccess={() => {
+                    setIsScheduleOpen(false)
+                    setSelectedSlot(null)
+                    refetchAppointments()
+                  }}
+                  onCancel={() => {
+                    setIsScheduleOpen(false)
+                    setSelectedSlot(null)
+                  }}
+                />
               </DialogContent>
             </Dialog>
           </motion.div>
@@ -586,97 +452,98 @@ export default function DoctorAppointmentsPage() {
                   </CardContent>
                 </Card>
               </TabsContent>
-            </Tabs>
-          </motion.div>
 
-          {/* Event Details Modal */}
-          {selectedEvent && (
-            <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Appointment Details</DialogTitle>
-                  <DialogDescription>
-                    {format(selectedEvent.start, "EEEE, MMMM do, yyyy 'at' h:mm a")}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Patient Information</h4>
-                      <div className="space-y-2">
-                        <p className="text-gray-600">
-                          <strong>Name:</strong> {selectedEvent.resource.patient?.full_name}
-                        </p>
-                        <p className="text-gray-600">
-                          <strong>Phone:</strong> {selectedEvent.resource.phone}
-                        </p>
-                        <p className="text-gray-600">
-                          <strong>Email:</strong> {selectedEvent.resource.patient?.email || "Not provided"}
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Appointment Details</h4>
-                      <div className="space-y-2">
-                        <p className="text-gray-600">
-                          <strong>Type:</strong> {selectedEvent.resource.treatment_type || "General Consultation"}
-                        </p>
-                        <p className="text-gray-600">
-                          <strong>Duration:</strong> 30 minutes
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <strong>Status:</strong>
-                          <Badge
-                            variant={
-                              selectedEvent.resource.status === "completed"
-                                ? "default"
-                                : selectedEvent.resource.status === "cancelled"
-                                  ? "destructive"
-                                  : "secondary"
-                            }
-                          >
-                            {selectedEvent.resource.status}
-                          </Badge>
+              {/* Event Details Modal */}
+              {selectedEvent && (
+                <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Appointment Details</DialogTitle>
+                      <DialogDescription>
+                        {format(selectedEvent.start, "EEEE, MMMM do, yyyy 'at' h:mm a")}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-2">Patient Information</h4>
+                          <div className="space-y-2">
+                            <p className="text-gray-600">
+                              <strong>Name:</strong> {selectedEvent.resource.patient?.full_name}
+                            </p>
+                            <p className="text-gray-600">
+                              <strong>Phone:</strong> {selectedEvent.resource.phone}
+                            </p>
+                            <p className="text-gray-600">
+                              <strong>Email:</strong> {selectedEvent.resource.patient?.email || "Not provided"}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-2">Appointment Details</h4>
+                          <div className="space-y-2">
+                            <p className="text-gray-600">
+                              <strong>Type:</strong> {selectedEvent.resource.treatment_type || "General Consultation"}
+                            </p>
+                            <p className="text-gray-600">
+                              <strong>Duration:</strong> 30 minutes
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <strong>Status:</strong>
+                              <Badge
+                                variant={
+                                  selectedEvent.resource.status === "completed"
+                                    ? "default"
+                                    : selectedEvent.resource.status === "cancelled"
+                                      ? "destructive"
+                                      : "secondary"
+                                }
+                              >
+                                {selectedEvent.resource.status}
+                              </Badge>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {selectedEvent.resource.notes && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
-                      <p className="text-gray-600 bg-gray-50 p-3 rounded-lg">{selectedEvent.resource.notes}</p>
-                    </div>
-                  )}
+                      {selectedEvent.resource.notes && (
+                        <div>
+                          <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
+                          <p className="text-gray-600 bg-gray-50 p-3 rounded-lg">{selectedEvent.resource.notes}</p>
+                        </div>
+                      )}
 
-                  <div className="flex flex-wrap gap-3">
-                    <Button>
-                      <Phone className="h-4 w-4 mr-2" />
-                      Call Patient
-                    </Button>
-                    <Button variant="outline">
-                      <MessageSquare className="h-4 w-4 mr-2" />
-                      Send SMS
-                    </Button>
-                    <Button variant="outline">
-                      <Mail className="h-4 w-4 mr-2" />
-                      Send Email
-                    </Button>
-                    <Button variant="outline">
-                      <CalendarDays className="h-4 w-4 mr-2" />
-                      Reschedule
-                    </Button>
-                    <Button variant="destructive">
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
+                      <div className="flex flex-wrap gap-3">
+                        <Button>
+                          <Phone className="h-4 w-4 mr-2" />
+                          Call Patient
+                        </Button>
+                        <Button variant="outline">
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          Send SMS
+                        </Button>
+                        <Button variant="outline">
+                          <Mail className="h-4 w-4 mr-2" />
+                          Send Email
+                        </Button>
+                        <Button variant="outline">
+                          <CalendarDays className="h-4 w-4 mr-2" />
+                          Reschedule
+                        </Button>
+                        <Button variant="destructive">
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </TabsContent>
+            </Tabs>
+          </motion.div>
         </div>
       </div>
-    </DashboardWrapper>
+  </DashboardWrapper>
   )
 }
