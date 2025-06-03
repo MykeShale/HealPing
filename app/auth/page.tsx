@@ -1,10 +1,9 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
+import { PageWrapper } from "@/components/ui/page-wrapper"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,8 +27,7 @@ import { supabase, signInWithGoogle, isGoogleOAuthEnabled } from "@/lib/supabase
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import Link from "next/link"
 
-export default function AuthPage() {
-  const { user, profile, loading } = useAuth()
+function AuthPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "signin")
@@ -46,19 +44,6 @@ export default function AuthPage() {
   const [googleEnabled, setGoogleEnabled] = useState(true)
 
   useEffect(() => {
-    if (!loading && user && profile) {
-      if (profile.role === "doctor") {
-        router.push("/doctor/dashboard")
-      } else if (profile.role === "patient") {
-        router.push("/patient/dashboard")
-      } else {
-        router.push("/dashboard")
-      }
-    }
-  }, [user, profile, loading, router])
-
-  useEffect(() => {
-    // Check if Google OAuth is enabled
     const checkGoogleOAuth = async () => {
       const enabled = await isGoogleOAuthEnabled()
       setGoogleEnabled(enabled)
@@ -136,27 +121,16 @@ export default function AuthPage() {
       setAuthError(null)
 
       await signInWithGoogle()
-
-      // The redirect will happen automatically
     } catch (error: any) {
       console.error("Google sign in error:", error)
       setAuthError(error.message || "Google sign-in failed. Please try again.")
 
-      // If Google is not enabled, disable the button
       if (error.message?.includes("not configured") || error.message?.includes("not enabled")) {
         setGoogleEnabled(false)
       }
     } finally {
       setGoogleLoading(false)
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <LoadingSpinner size="lg" text="Loading HealPing..." />
-      </div>
-    )
   }
 
   return (
@@ -227,9 +201,6 @@ export default function AuthPage() {
                       <p className="text-sm">
                         To enable Google authentication, please configure OAuth in your Supabase project.
                       </p>
-                      <Link href="/auth/setup-guide" className="text-blue-600 hover:underline text-sm">
-                        View Setup Guide →
-                      </Link>
                     </div>
                   </AlertDescription>
                 </Alert>
@@ -463,5 +434,13 @@ export default function AuthPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AuthPage() {
+  return (
+    <PageWrapper requireAuth={false}>
+      <AuthPageContent />
+    </PageWrapper>
   )
 }

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { RoleSelection } from "@/components/auth/role-selection"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { PageWrapper } from "@/components/ui/page-wrapper"
 
-export default function AuthCallback() {
+function AuthCallbackContent() {
   const router = useRouter()
   const [needsRoleSelection, setNeedsRoleSelection] = useState(false)
   const [userInfo, setUserInfo] = useState<{ id: string; email: string; full_name?: string } | null>(null)
@@ -14,10 +15,14 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let mounted = true
+
     const handleAuthCallback = async () => {
       try {
         // Handle the OAuth callback
         const { data, error } = await supabase.auth.getSession()
+
+        if (!mounted) return
 
         if (error) {
           console.error("Auth callback error:", error)
@@ -35,6 +40,8 @@ export default function AuthCallback() {
             .select("*")
             .eq("id", user.id)
             .single()
+
+          if (!mounted) return
 
           if (profileError && profileError.code !== "PGRST116") {
             console.error("Profile fetch error:", profileError)
@@ -67,14 +74,22 @@ export default function AuthCallback() {
         }
       } catch (error) {
         console.error("Unexpected error:", error)
-        setError("An unexpected error occurred. Please try again.")
-        setTimeout(() => router.push("/auth"), 3000)
+        if (mounted) {
+          setError("An unexpected error occurred. Please try again.")
+          setTimeout(() => router.push("/auth"), 3000)
+        }
       } finally {
-        setLoading(false)
+        if (mounted) {
+          setLoading(false)
+        }
       }
     }
 
     handleAuthCallback()
+
+    return () => {
+      mounted = false
+    }
   }, [router])
 
   const handleRoleSelectionComplete = () => {
@@ -127,5 +142,13 @@ export default function AuthCallback() {
         <p className="text-gray-600">Almost done!</p>
       </div>
     </div>
+  )
+}
+
+export default function AuthCallback() {
+  return (
+    <PageWrapper requireAuth={false}>
+      <AuthCallbackContent />
+    </PageWrapper>
   )
 }
