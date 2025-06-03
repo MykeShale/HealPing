@@ -1,161 +1,192 @@
 "use client"
 
 import type React from "react"
+
 import { createContext, useContext, useEffect, useState } from "react"
-import type { User } from "@supabase/supabase-js"
-import type { Tables } from "./supabase"
-import { supabase } from "./supabase"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useRouter } from "next/navigation"
+import type { Database } from "./database.types"
 
-type Profile = Tables<"profiles">
+type Profile = {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  role: "doctor" | "patient" | "admin" | null
+  avatar_url: string | null
+  preferences: any | null
+}
 
-interface AuthContextType {
-  user: User | null
+type AuthContextType = {
+  user: any | null
   profile: Profile | null
   loading: boolean
+  signIn: (email: string, password: string) => Promise<any>
+  signUp: (email: string, password: string) => Promise<any>
   signOut: () => Promise<void>
-  error: string | null
+  updateProfile: (profile: Partial<Profile>) => Promise<void>
+  setRole: (role: "doctor" | "patient" | "admin") => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<any | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
-    let mounted = true
-
-    // Get initial session
-    const getInitialSession = async () => {
+    const getSession = async () => {
       try {
         const {
           data: { session },
-          error,
         } = await supabase.auth.getSession()
-
-        if (!mounted) return
-
-        if (error) {
-          console.error("Auth session error:", error)
-          setError(error.message)
-          setLoading(false)
-          return
-        }
-
-        setUser(session?.user ?? null)
+        setUser(session?.user || null)
 
         if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
-          setLoading(false)
+          const { data, error } = await supabase.from("profiles").select("*").eq("id", session.user.id).single()
+
+          if (error) {
+            console.error("Error fetching profile:", error)
+          } else {
+            setProfile(data as Profile)
+          }
         }
-      } catch (err) {
-        if (!mounted) return
-        console.error("Session fetch error:", err)
-        setError("Failed to load session")
+      } catch (error) {
+        console.error("Error getting session:", error)
+      } finally {
         setLoading(false)
       }
     }
 
-    getInitialSession()
+    getSession()
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
+      setUser(session?.user || null)
 
-      console.log("Auth state changed:", event, session?.user?.id)
+      if (session?.user) {
+        const { data, error } = await supabase.from("profiles").select("*").eq("id", session.user.id).single()
 
-      if (event === "SIGNED_OUT") {
-        setUser(null)
-        setProfile(null)
-        setError(null)
-        setLoading(false)
-        return
-      }
-
-      if (event === "SIGNED_IN") {
-        setUser(session?.user ?? null)
-
-        if (session?.user) {
-          await fetchProfile(session.user.id)
+        if (error) {
+          console.error("Error fetching profile:", error)
         } else {
-          setProfile(null)
-          setLoading(false)
+          setProfile(data as Profile)
         }
+      } else {
+        setProfile(null)
       }
 
-      if (event === "TOKEN_REFRESHED") {
-        setUser(session?.user ?? null)
-        // Don't refetch profile on token refresh, just update user
-        setLoading(false)
-      }
+      setLoading(false)
+      router.refresh()
     })
 
     return () => {
-      mounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase, router])
 
-  const fetchProfile = async (userId: string) => {
+  const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true)
-      setError(null)
-
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
       if (error) {
-        if (error.code === "PGRST116") {
-          console.log("No profile found for user, this is normal for new users")
-          setProfile(null)
-        } else {
-          console.error("Profile fetch error:", error)
-          setError(error.message)
-        }
-      } else {
-        setProfile(data)
-        setError(null)
+        throw error
       }
+
+      return data
     } catch (error) {
-      console.error("Error fetching profile:", error)
-      setError(error instanceof Error ? error.message : "Failed to fetch profile")
-    } finally {
-      setLoading(false)
+      console.error("Error signing in:", error)
+      throw error
+    }
+  }
+
+  const signUp = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      return data
+    } catch (error) {
+      console.error("Error signing up:", error)
+      throw error
     }
   }
 
   const signOut = async () => {
     try {
-      setLoading(true)
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error("Error signing out:", error)
-        setError(error.message)
-      } else {
-        // Clear state immediately
-        setUser(null)
-        setProfile(null)
-        setError(null)
-        // Redirect to home page
-        window.location.href = "/"
-      }
+      await supabase.auth.signOut()
+      router.push("/auth")
     } catch (error) {
-      console.error("Logout error:", error)
-      setError("Failed to sign out")
-    } finally {
-      setLoading(false)
+      console.error("Error signing out:", error)
     }
   }
 
-  return <AuthContext.Provider value={{ user, profile, loading, signOut, error }}>{children}</AuthContext.Provider>
+  const updateProfile = async (profileData: Partial<Profile>) => {
+    try {
+      if (!user) throw new Error("No user logged in")
+
+      const { error } = await supabase.from("profiles").update(profileData).eq("id", user.id)
+
+      if (error) throw error
+
+      setProfile((prev) => (prev ? { ...prev, ...profileData } : null))
+    } catch (error) {
+      console.error("Error updating profile:", error)
+      throw error
+    }
+  }
+
+  const setRole = async (role: "doctor" | "patient" | "admin") => {
+    try {
+      if (!user) throw new Error("No user logged in")
+
+      const { error } = await supabase.from("profiles").update({ role }).eq("id", user.id)
+
+      if (error) throw error
+
+      setProfile((prev) => (prev ? { ...prev, role } : null))
+
+      // Redirect based on role
+      if (role === "doctor") {
+        router.push("/doctor/dashboard")
+      } else if (role === "patient") {
+        router.push("/patient/dashboard")
+      } else {
+        router.push("/dashboard")
+      }
+    } catch (error) {
+      console.error("Error setting role:", error)
+      throw error
+    }
+  }
+
+  const value = {
+    user,
+    profile,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+    setRole,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext)
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider")

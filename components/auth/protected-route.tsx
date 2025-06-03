@@ -2,60 +2,54 @@
 
 import type React from "react"
 
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { useRouter } from "next/navigation"
-import { useEffect } from "react"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
-  requiredRole?: "doctor" | "patient" | "staff"
-  fallbackPath?: string
+  requiredRole?: "doctor" | "patient" | "admin"
 }
 
-export function ProtectedRoute({ children, requiredRole, fallbackPath = "/" }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, profile, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.push(fallbackPath)
+        router.push("/auth")
         return
       }
 
       if (requiredRole && profile?.role !== requiredRole) {
-        router.push(fallbackPath)
-        return
+        // Redirect to appropriate dashboard based on role
+        if (profile?.role === "doctor") {
+          router.push("/doctor/dashboard")
+        } else if (profile?.role === "patient") {
+          router.push("/patient/dashboard")
+        } else {
+          router.push("/auth")
+        }
       }
     }
-  }, [user, profile, loading, requiredRole, fallbackPath, router])
+  }, [user, profile, loading, requiredRole, router])
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" text="Authenticating..." />
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" />
       </div>
     )
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" text="Redirecting..." />
-      </div>
-    )
+    return null
   }
 
   if (requiredRole && profile?.role !== requiredRole) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return <>{children}</>
