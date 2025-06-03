@@ -1,10 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useAuth } from "@/lib/auth-context"
 
 interface UseDashboardDataOptions<T> {
-  fetchFunction: (clinicId?: string) => Promise<T>
+  fetchFunction: () => Promise<T>
   fallbackData: T
   dependencies?: any[]
   enabled?: boolean
@@ -16,49 +15,58 @@ export function useDashboardData<T>({
   dependencies = [],
   enabled = true,
 }: UseDashboardDataOptions<T>) {
-  const { profile, initialized } = useAuth()
   const [data, setData] = useState<T>(fallbackData)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
   const fetchingRef = useRef(false)
 
   const fetchData = useCallback(async () => {
-    if (!enabled || !initialized || fetchingRef.current) {
-      return
-    }
+    if (!enabled || fetchingRef.current || !mountedRef.current) return
 
     try {
       fetchingRef.current = true
       setLoading(true)
       setError(null)
 
-      const result = await fetchFunction(profile?.clinic_id || undefined)
-      setData(result)
+      const result = await fetchFunction()
+
+      if (mountedRef.current) {
+        // Ensure we always have valid data
+        setData(result ?? fallbackData)
+      }
     } catch (err) {
       console.error("Error fetching dashboard data:", err)
-      setError(err instanceof Error ? err.message : "Failed to fetch data")
-      setData(fallbackData)
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to fetch data")
+        setData(fallbackData)
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
       fetchingRef.current = false
     }
-  }, [fetchFunction, profile?.clinic_id, fallbackData, enabled, initialized])
+  }, [fetchFunction, fallbackData, enabled])
 
   useEffect(() => {
-    if (initialized && enabled) {
-      fetchData()
+    mountedRef.current = true
+    fetchData()
+
+    return () => {
+      mountedRef.current = false
     }
-  }, [initialized, enabled, profile?.clinic_id, ...dependencies])
+  }, [fetchData, ...dependencies])
 
   const refetch = useCallback(() => {
-    if (initialized && enabled) {
+    if (mountedRef.current) {
       fetchData()
     }
-  }, [fetchData, initialized, enabled])
+  }, [fetchData])
 
   return {
     data,
-    loading: loading && enabled,
+    loading,
     error,
     refetch,
   }
