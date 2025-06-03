@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "./supabase"
 
@@ -24,6 +24,7 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   initialized: boolean
+  error: string | null
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -33,6 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   initialized: false,
+  error: null,
   signOut: async () => {},
   refreshProfile: async () => {},
 })
@@ -42,6 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
+  const initializingRef = useRef(false)
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     try {
@@ -49,8 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         if (error.code === "PGRST116") {
-          // No profile found - this is normal for new users
-          console.log("No profile found for user:", userId)
+          // No profile found - normal for new users
           return null
         }
         console.error("Error fetching profile:", error)
@@ -65,9 +69,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const refreshProfile = useCallback(async () => {
-    if (user?.id) {
+    if (!user?.id || !mountedRef.current) return
+
+    try {
       const profileData = await fetchProfile(user.id)
-      setProfile(profileData)
+      if (mountedRef.current) {
+        setProfile(profileData)
+      }
+    } catch (error) {
+      console.error("Error refreshing profile:", error)
     }
   }, [user?.id, fetchProfile])
 
@@ -75,19 +85,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true)
       await supabase.auth.signOut()
-      setUser(null)
-      setProfile(null)
+      if (mountedRef.current) {
+        setUser(null)
+        setProfile(null)
+        setError(null)
+      }
     } catch (error) {
       console.error("Error signing out:", error)
+      if (mountedRef.current) {
+        setError("Failed to sign out")
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    let mounted = true
+    mountedRef.current = true
 
     const initializeAuth = async () => {
+      if (initializingRef.current) return
+      initializingRef.current = true
+
       try {
         // Get initial session
         const {
@@ -95,19 +116,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error,
         } = await supabase.auth.getSession()
 
-        if (!mounted) return
+        if (!mountedRef.current) return
 
         if (error) {
           console.error("Error getting session:", error)
-          setLoading(false)
-          setInitialized(true)
+          setError(error.message)
           return
         }
 
         if (session?.user) {
           setUser(session.user)
           const profileData = await fetchProfile(session.user.id)
-          if (mounted) {
+          if (mountedRef.current) {
             setProfile(profileData)
           }
         } else {
@@ -116,11 +136,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Error initializing auth:", error)
+        if (mountedRef.current) {
+          setError("Failed to initialize authentication")
+        }
       } finally {
-        if (mounted) {
+        if (mountedRef.current) {
           setLoading(false)
           setInitialized(true)
         }
+        initializingRef.current = false
       }
     }
 
@@ -130,15 +154,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
+      if (!mountedRef.current) return
 
       console.log("Auth state changed:", event)
 
       try {
-        if (session?.user) {
+        if (event === "SIGNED_OUT") {
+          setUser(null)
+          setProfile(null)
+          setError(null)
+        } else if (session?.user) {
           setUser(session.user)
           const profileData = await fetchProfile(session.user.id)
-          if (mounted) {
+          if (mountedRef.current) {
             setProfile(profileData)
           }
         } else {
@@ -147,8 +175,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Error handling auth state change:", error)
+        if (mountedRef.current) {
+          setError("Authentication error occurred")
+        }
       } finally {
-        if (mounted) {
+        if (mountedRef.current && !initializingRef.current) {
           setLoading(false)
           setInitialized(true)
         }
@@ -156,13 +187,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     return () => {
-      mounted = false
+      mountedRef.current = false
       subscription.unsubscribe()
     }
   }, [fetchProfile])
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, initialized, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        initialized,
+        error,
+        signOut,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
