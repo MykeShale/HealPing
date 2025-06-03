@@ -22,6 +22,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    flowType: "pkce",
   },
 })
 
@@ -33,6 +34,32 @@ export const isSupabaseConfigured = () => {
 // Safe Supabase client getter
 export const getSupabase = () => {
   return supabase
+}
+
+// Google OAuth helper
+export const signInWithGoogle = async () => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    })
+
+    if (error) {
+      console.error("Google OAuth error:", error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error("Error signing in with Google:", error)
+    throw error
+  }
 }
 
 export type Tables<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"]
