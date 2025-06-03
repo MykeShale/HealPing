@@ -30,7 +30,7 @@ interface PatientStats {
 }
 
 export function PatientDashboard() {
-  const { user, profile, loading: authLoading } = useAuth()
+  const { user, profile, initialized } = useAuth()
   const [patientProfile, setPatientProfile] = useState<any>(null)
   const [appointments, setAppointments] = useState<any[]>([])
   const [medicalRecords, setMedicalRecords] = useState<any[]>([])
@@ -41,7 +41,10 @@ export function PatientDashboard() {
   // Fetch patient data
   useEffect(() => {
     const fetchPatientData = async () => {
-      if (!user?.id) return
+      if (!initialized || !user?.id) {
+        setLoading(false)
+        return
+      }
 
       try {
         setLoading(true)
@@ -70,7 +73,7 @@ export function PatientDashboard() {
     }
 
     fetchPatientData()
-  }, [user?.id])
+  }, [user?.id, initialized])
 
   // Calculate dashboard stats
   const stats: PatientStats = {
@@ -104,10 +107,16 @@ export function PatientDashboard() {
     })),
   ].slice(0, 3)
 
-  if (authLoading || loading) {
+  if (!initialized || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" text="Loading your dashboard..." />
+        <div className="text-center space-y-4">
+          <LoadingSpinner size="lg" />
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Loading your dashboard...</h2>
+            <p className="text-gray-600">Please wait while we fetch your health information.</p>
+          </div>
+        </div>
       </div>
     )
   }
@@ -118,6 +127,9 @@ export function PatientDashboard() {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Please Sign In</h2>
           <p className="text-gray-600">You need to be signed in to access this page.</p>
+          <Button asChild className="mt-4">
+            <Link href="/auth">Sign In</Link>
+          </Button>
         </div>
       </div>
     )
@@ -129,6 +141,9 @@ export function PatientDashboard() {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
           <p className="text-gray-600">You don't have permission to access this page.</p>
+          <Button asChild className="mt-4">
+            <Link href="/doctor/dashboard">Go to Doctor Dashboard</Link>
+          </Button>
         </div>
       </div>
     )
@@ -140,6 +155,9 @@ export function PatientDashboard() {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Patient Profile Not Found</h2>
           <p className="text-gray-600">Please contact your healthcare provider to set up your patient profile.</p>
+          <Button asChild className="mt-4">
+            <Link href="/contact">Contact Support</Link>
+          </Button>
         </div>
       </div>
     )
