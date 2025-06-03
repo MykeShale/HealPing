@@ -31,11 +31,76 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries: number = MAX_RETRI
   throw lastError!
 }
 
-// Dashboard statistics for doctors
-export async function getDashboardStats(clinicId: string) {
+// Helper function to get or create clinic for user
+export async function getOrCreateClinicForUser(userId: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
+
+      // First check if user already has a clinic
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("clinic_id")
+        .eq("id", userId)
+        .single()
+
+      if (profileError) throw profileError
+
+      if (profile.clinic_id) {
+        return profile.clinic_id
+      }
+
+      // If no clinic, get the default clinic or create one
+      let { data: clinic, error: clinicError } = await supabase
+        .from("clinics")
+        .select("id")
+        .eq("name", "Default Medical Practice")
+        .single()
+
+      if (clinicError || !clinic) {
+        // Create default clinic if it doesn't exist
+        const { data: newClinic, error: createError } = await supabase
+          .from("clinics")
+          .insert([
+            {
+              name: "Default Medical Practice",
+              address: "123 Healthcare Ave, Medical City, MC 12345",
+              phone: "+1-555-MEDICAL",
+              email: "contact@defaultpractice.com",
+            },
+          ])
+          .select()
+          .single()
+
+        if (createError) throw createError
+        clinic = newClinic
+      }
+
+      // Update user profile with clinic_id
+      const { error: updateError } = await supabase.from("profiles").update({ clinic_id: clinic.id }).eq("id", userId)
+
+      if (updateError) throw updateError
+
+      return clinic.id
+    })
+  })
+}
+
+// Dashboard statistics for doctors
+export async function getDashboardStats(clinicId?: string) {
+  return withRetry(async () => {
+    return withTimeout(async () => {
+      const supabase = getSupabase()
+
+      if (!clinicId) {
+        return {
+          total_patients: 0,
+          today_appointments: 0,
+          pending_reminders: 0,
+          upcoming_followups: 0,
+          overdue_followups: 0,
+        }
+      }
 
       try {
         // Get patients count
@@ -109,7 +174,7 @@ export async function getDashboardStats(clinicId: string) {
 
 // Patient management
 export async function createPatient(patientData: {
-  clinic_id: string
+  clinic_id?: string
   full_name: string
   phone: string
   email?: string
@@ -126,9 +191,25 @@ export async function createPatient(patientData: {
     return withTimeout(async () => {
       const supabase = getSupabase()
 
+      // If no clinic_id provided, try to get/create one
+      let clinicId = patientData.clinic_id
+      if (!clinicId) {
+        // Get the default clinic
+        const { data: clinic, error: clinicError } = await supabase
+          .from("clinics")
+          .select("id")
+          .eq("name", "Default Medical Practice")
+          .single()
+
+        if (clinicError || !clinic) {
+          throw new Error("No clinic found. Please contact support.")
+        }
+        clinicId = clinic.id
+      }
+
       // Ensure proper data structure
       const insertData = {
-        clinic_id: patientData.clinic_id,
+        clinic_id: clinicId,
         full_name: patientData.full_name,
         phone: patientData.phone,
         email: patientData.email || null,
@@ -154,10 +235,15 @@ export async function createPatient(patientData: {
   })
 }
 
-export async function getPatients(clinicId: string) {
+export async function getPatients(clinicId?: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
+
+      if (!clinicId) {
+        return []
+      }
+
       const { data, error } = await supabase
         .from("patients")
         .select("*")
@@ -178,7 +264,7 @@ export async function getPatients(clinicId: string) {
 export async function scheduleAppointment(appointmentData: {
   patient_id: string
   doctor_id: string
-  clinic_id: string
+  clinic_id?: string
   appointment_date: string
   duration_minutes?: number
   treatment_type?: string
@@ -187,13 +273,29 @@ export async function scheduleAppointment(appointmentData: {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
+
+      // If no clinic_id provided, get it from the doctor's profile
+      let clinicId = appointmentData.clinic_id
+      if (!clinicId) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("clinic_id")
+          .eq("id", appointmentData.doctor_id)
+          .single()
+
+        if (profileError || !profile.clinic_id) {
+          throw new Error("Doctor's clinic not found")
+        }
+        clinicId = profile.clinic_id
+      }
+
       const { data, error } = await supabase
         .from("appointments")
         .insert([
           {
             patient_id: appointmentData.patient_id,
             doctor_id: appointmentData.doctor_id,
-            clinic_id: appointmentData.clinic_id,
+            clinic_id: clinicId,
             appointment_date: appointmentData.appointment_date,
             duration_minutes: appointmentData.duration_minutes || 30,
             treatment_type: appointmentData.treatment_type,
@@ -210,10 +312,15 @@ export async function scheduleAppointment(appointmentData: {
   })
 }
 
-export async function getAppointments(clinicId: string) {
+export async function getAppointments(clinicId?: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
+
+      if (!clinicId) {
+        return []
+      }
+
       const { data, error } = await supabase
         .from("appointments")
         .select(`
@@ -429,10 +536,15 @@ export async function createReminders(appointmentId: string, reminderTypes: stri
   })
 }
 
-export async function getReminders(clinicId: string) {
+export async function getReminders(clinicId?: string) {
   return withRetry(async () => {
     return withTimeout(async () => {
       const supabase = getSupabase()
+
+      if (!clinicId) {
+        return []
+      }
+
       const { data, error } = await supabase
         .from("reminders")
         .select(`

@@ -57,20 +57,11 @@ export function AddPatientForm({ onSuccess }: { onSuccess?: () => void }) {
   })
 
   const onSubmit = async (data: PatientFormData) => {
-    if (!profile?.clinic_id) {
-      toast({
-        title: "Error",
-        description: "No clinic associated with your account",
-        variant: "destructive",
-      })
-      return
-    }
-
     setIsSubmitting(true)
     try {
       // Prepare patient data with proper structure
       const patientData = {
-        clinic_id: profile.clinic_id,
+        clinic_id: profile?.clinic_id, // This can be undefined, the function will handle it
         full_name: data.full_name,
         phone: data.phone,
         email: data.email || undefined,
@@ -110,7 +101,7 @@ export function AddPatientForm({ onSuccess }: { onSuccess?: () => void }) {
       console.error("Error creating patient:", error)
       toast({
         title: "Error",
-        description: "Failed to add patient. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to add patient. Please try again.",
         variant: "destructive",
       })
     } finally {
