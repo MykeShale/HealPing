@@ -30,7 +30,7 @@ export function DoctorDashboard() {
     error,
     refetch,
   } = useDashboardData<DashboardStats>({
-    fetchFunction: getDashboardStats,
+    fetchFunction: () => getDashboardStats(profile?.clinic_id),
     fallbackData: {
       total_patients: 0,
       today_appointments: 0,
