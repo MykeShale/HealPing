@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { getReminders } from "@/lib/supabase-functions"
 import { Bell, MessageSquare, Mail, Phone, Send, Clock, CheckCircle, XCircle } from "lucide-react"
-import { motion } from "framer-motion"
 
 interface Reminder {
   id: string
@@ -26,13 +25,14 @@ interface Reminder {
       full_name: string
       phone: string
     }
-  }
+  } | null
 }
 
 export function NotificationCenter() {
   const { profile } = useAuth()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [notificationSettings, setNotificationSettings] = useState({
     sms: true,
     email: true,
@@ -44,15 +44,21 @@ export function NotificationCenter() {
   useEffect(() => {
     if (profile?.clinic_id) {
       fetchReminders()
+    } else {
+      setLoading(false)
     }
   }, [profile])
 
   const fetchReminders = async () => {
     try {
+      setError(null)
       const remindersData = await getReminders(profile?.clinic_id!)
-      setReminders(remindersData)
+      // Ensure we always have an array
+      setReminders(Array.isArray(remindersData) ? remindersData : [])
     } catch (error) {
       console.error("Error fetching reminders:", error)
+      setError("Failed to load reminders")
+      setReminders([])
     } finally {
       setLoading(false)
     }
@@ -86,8 +92,10 @@ export function NotificationCenter() {
     }
   }
 
-  const pendingReminders = reminders.filter((r) => r.status === "pending")
-  const sentReminders = reminders.filter((r) => r.status !== "pending")
+  // Safely filter reminders
+  const safeReminders = Array.isArray(reminders) ? reminders : []
+  const pendingReminders = safeReminders.filter((r) => r?.status === "pending")
+  const sentReminders = safeReminders.filter((r) => r?.status !== "pending")
 
   if (loading) {
     return (
@@ -99,6 +107,29 @@ export function NotificationCenter() {
         <CardContent>
           <div className="h-64 flex items-center justify-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Notification Center</CardTitle>
+          <CardDescription>Error loading notifications</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <div className="text-red-500 mb-4">
+              <Bell className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load notifications</h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={fetchReminders} className="bg-blue-600 hover:bg-blue-700">
+              Try Again
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -140,7 +171,7 @@ export function NotificationCenter() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Delivered</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {reminders.filter((r) => r.status === "delivered").length}
+                  {safeReminders.filter((r) => r?.status === "delivered").length}
                 </p>
               </div>
             </div>
@@ -154,7 +185,7 @@ export function NotificationCenter() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Failed</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {reminders.filter((r) => r.status === "failed").length}
+                  {safeReminders.filter((r) => r?.status === "failed").length}
                 </p>
               </div>
             </div>
@@ -167,7 +198,7 @@ export function NotificationCenter() {
               <Bell className="h-5 w-5 text-blue-600" />
               <div>
                 <p className="text-sm font-medium text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-gray-900">{reminders.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{safeReminders.length}</p>
               </div>
             </div>
           </CardContent>
@@ -195,12 +226,9 @@ export function NotificationCenter() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {pendingReminders.map((reminder, index) => (
-                    <motion.div
+                  {pendingReminders.map((reminder) => (
+                    <div
                       key={reminder.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
                     >
                       <div className="flex items-center space-x-4">
@@ -211,8 +239,12 @@ export function NotificationCenter() {
                           </Badge>
                         </div>
                         <div>
-                          <p className="font-medium">{reminder.appointments.patients.full_name}</p>
-                          <p className="text-sm text-gray-600">{reminder.appointments.treatment_type}</p>
+                          <p className="font-medium">
+                            {reminder.appointments?.patients?.full_name || "Unknown Patient"}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {reminder.appointments?.treatment_type || "General Appointment"}
+                          </p>
                           <p className="text-xs text-gray-500">
                             Scheduled for: {new Date(reminder.scheduled_for).toLocaleString()}
                           </p>
@@ -224,7 +256,7 @@ export function NotificationCenter() {
                           Send Now
                         </Button>
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -240,45 +272,48 @@ export function NotificationCenter() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {sentReminders.map((reminder, index) => (
-                  <motion.div
-                    key={reminder.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="flex items-center justify-between p-4 border rounded-lg"
-                  >
-                    <div className="flex items-center space-x-4">
+                {sentReminders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Send className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No sent reminders</p>
+                  </div>
+                ) : (
+                  sentReminders.map((reminder) => (
+                    <div key={reminder.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          {getTypeIcon(reminder.reminder_type)}
+                          <Badge variant="outline" className="capitalize">
+                            {reminder.reminder_type}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {reminder.appointments?.patients?.full_name || "Unknown Patient"}
+                          </p>
+                          <p className="text-sm text-gray-600">{reminder.message_content}</p>
+                          <p className="text-xs text-gray-500">
+                            Sent: {reminder.sent_at ? new Date(reminder.sent_at).toLocaleString() : "Not sent"}
+                          </p>
+                        </div>
+                      </div>
                       <div className="flex items-center space-x-2">
-                        {getTypeIcon(reminder.reminder_type)}
-                        <Badge variant="outline" className="capitalize">
-                          {reminder.reminder_type}
+                        {getStatusIcon(reminder.status)}
+                        <Badge
+                          variant={
+                            reminder.status === "delivered"
+                              ? "default"
+                              : reminder.status === "failed"
+                                ? "destructive"
+                                : "secondary"
+                          }
+                        >
+                          {reminder.status}
                         </Badge>
                       </div>
-                      <div>
-                        <p className="font-medium">{reminder.appointments.patients.full_name}</p>
-                        <p className="text-sm text-gray-600">{reminder.message_content}</p>
-                        <p className="text-xs text-gray-500">
-                          Sent: {reminder.sent_at ? new Date(reminder.sent_at).toLocaleString() : "Not sent"}
-                        </p>
-                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(reminder.status)}
-                      <Badge
-                        variant={
-                          reminder.status === "delivered"
-                            ? "default"
-                            : reminder.status === "failed"
-                              ? "destructive"
-                              : "secondary"
-                        }
-                      >
-                        {reminder.status}
-                      </Badge>
-                    </div>
-                  </motion.div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

@@ -7,8 +7,8 @@ import { supabase } from "./supabase"
 
 interface Profile {
   id: string
-  email: string
   role: "doctor" | "patient" | "admin"
+  full_name: string | null
   first_name: string | null
   last_name: string | null
   phone: string | null
@@ -46,7 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
-  const initializingRef = useRef(false)
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     try {
@@ -54,7 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         if (error.code === "PGRST116") {
-          // No profile found - normal for new users
           return null
         }
         console.error("Error fetching profile:", error)
@@ -106,11 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mountedRef.current = true
 
     const initializeAuth = async () => {
-      if (initializingRef.current) return
-      initializingRef.current = true
-
       try {
-        // Get initial session
         const {
           data: { session },
           error,
@@ -144,19 +138,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false)
           setInitialized(true)
         }
-        initializingRef.current = false
       }
     }
 
     initializeAuth()
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mountedRef.current) return
-
-      console.log("Auth state changed:", event)
 
       try {
         if (event === "SIGNED_OUT") {
@@ -179,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setError("Authentication error occurred")
         }
       } finally {
-        if (mountedRef.current && !initializingRef.current) {
+        if (mountedRef.current) {
           setLoading(false)
           setInitialized(true)
         }
