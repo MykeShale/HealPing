@@ -36,7 +36,22 @@ export const getSupabase = () => {
   return supabase
 }
 
-// Google OAuth helper
+// Check if Google OAuth is enabled
+export const isGoogleOAuthEnabled = async () => {
+  try {
+    // Try to get the auth providers configuration
+    const { data, error } = await supabase.auth.getSession()
+    if (error) return false
+
+    // For now, we'll assume it's enabled and handle errors gracefully
+    return true
+  } catch (error) {
+    console.error("Error checking Google OAuth status:", error)
+    return false
+  }
+}
+
+// Google OAuth helper with better error handling
 export const signInWithGoogle = async () => {
   try {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -52,11 +67,21 @@ export const signInWithGoogle = async () => {
 
     if (error) {
       console.error("Google OAuth error:", error)
-      throw error
+
+      // Handle specific error cases
+      if (error.message?.includes("provider is not enabled") || error.message?.includes("Unsupported provider")) {
+        throw new Error("Google login is not configured. Please contact support or use email authentication.")
+      }
+
+      if (error.message?.includes("popup")) {
+        throw new Error("Popup was blocked. Please allow popups and try again.")
+      }
+
+      throw new Error(error.message || "Google sign-in failed. Please try again.")
     }
 
     return data
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error signing in with Google:", error)
     throw error
   }

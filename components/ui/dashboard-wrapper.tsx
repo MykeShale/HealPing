@@ -4,7 +4,7 @@ import type React from "react"
 import { useAuth } from "@/lib/auth-context"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 
 interface DashboardWrapperProps {
   children: React.ReactNode
@@ -14,73 +14,78 @@ interface DashboardWrapperProps {
 }
 
 export function DashboardWrapper({ children, requiredRole, title, description }: DashboardWrapperProps) {
-  const { user, profile, loading, error } = useAuth()
+  const { user, profile, loading, initialized } = useAuth()
   const router = useRouter()
+  const [shouldRender, setShouldRender] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Only proceed if auth is initialized
+    if (!initialized) return
+
+    // If no user, redirect to auth
+    if (!user) {
+      setRedirecting(true)
       router.push("/auth")
       return
     }
 
-    if (!loading && user && profile && requiredRole && profile.role !== requiredRole) {
-      // Redirect to appropriate dashboard based on role
-      if (profile.role === "doctor") {
-        router.push("/doctor/dashboard")
-      } else if (profile.role === "patient") {
-        router.push("/patient/dashboard")
-      } else {
-        router.push("/dashboard")
+    // If user exists but no profile, they might need to complete setup
+    if (user && !profile) {
+      setRedirecting(true)
+      router.push("/auth/role-selection")
+      return
+    }
+
+    // If role is required and doesn't match, redirect to appropriate dashboard
+    if (requiredRole && profile && profile.role !== requiredRole) {
+      setRedirecting(true)
+      switch (profile.role) {
+        case "doctor":
+          router.push("/doctor/dashboard")
+          break
+        case "patient":
+          router.push("/patient/dashboard")
+          break
+        default:
+          router.push("/dashboard")
       }
       return
     }
-  }, [user, profile, loading, requiredRole, router])
 
-  if (loading) {
+    // All checks passed, render the component
+    setShouldRender(true)
+    setRedirecting(false)
+  }, [user, profile, initialized, requiredRole, router])
+
+  // Show loading while auth is initializing
+  if (!initialized || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center space-y-4">
           <LoadingSpinner size="lg" />
-          {title && <h2 className="mt-4 text-lg font-medium text-gray-900">{title}</h2>}
-          {description && <p className="mt-2 text-sm text-gray-600">{description}</p>}
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-600 mb-4">
-            <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">{title || "Loading..."}</h2>
+            <p className="text-gray-600">{description || "Please wait while we load your dashboard."}</p>
           </div>
-          <h2 className="text-lg font-medium text-gray-900">Something went wrong</h2>
-          <p className="mt-2 text-sm text-gray-600">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Try again
-          </button>
         </div>
       </div>
     )
   }
 
-  if (!user) {
-    return null // Will redirect to auth
-  }
-
-  if (requiredRole && (!profile || profile.role !== requiredRole)) {
-    return null // Will redirect to appropriate dashboard
+  // Show loading while redirecting
+  if (redirecting || !shouldRender) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center space-y-4">
+          <LoadingSpinner size="lg" />
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Redirecting...</h2>
+            <p className="text-gray-600">Taking you to the right place.</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return <>{children}</>
