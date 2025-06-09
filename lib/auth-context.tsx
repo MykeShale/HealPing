@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
+  const initializingRef = useRef(false)
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     try {
@@ -104,6 +105,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mountedRef.current = true
 
     const initializeAuth = async () => {
+      // Prevent multiple initializations
+      if (initializingRef.current) return
+      initializingRef.current = true
+
       try {
         const {
           data: { session },
@@ -138,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false)
           setInitialized(true)
         }
+        initializingRef.current = false
       }
     }
 
