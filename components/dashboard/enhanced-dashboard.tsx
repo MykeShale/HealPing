@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,7 @@ interface DashboardStats {
 }
 
 export function EnhancedDashboard() {
-  const { profile } = useAuth()
+  const { profile, initialized } = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
     total_patients: 0,
     today_appointments: 0,
@@ -29,63 +29,83 @@ export function EnhancedDashboard() {
   const [loading, setLoading] = useState(true)
   const [realTimeUpdates, setRealTimeUpdates] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
+  const fetchingRef = useRef(false)
 
-  useEffect(() => {
-    if (profile?.clinic_id) {
-      fetchStats()
-      setupRealTimeSubscriptions()
-    } else if (profile && !profile.clinic_id) {
-      // User has profile but no clinic - stop loading
-      setLoading(false)
-    }
-  }, [profile])
-
-  const fetchStats = async () => {
-    if (!profile?.clinic_id) {
-      console.log("No clinic_id found, skipping stats fetch")
+  const fetchStats = useCallback(async () => {
+    if (!profile?.clinic_id || fetchingRef.current || !mountedRef.current) {
       setLoading(false)
       return
     }
 
     try {
-      setLoading(true)
-      const data = await getDashboardStats(profile.clinic_id)
-      setStats(data)
+      fetchingRef.current = true
       setError(null)
+
+      const data = await getDashboardStats(profile.clinic_id)
+
+      if (mountedRef.current) {
+        setStats(data)
+      }
     } catch (error) {
       console.error("Error fetching dashboard stats:", error)
-      setError("Failed to load dashboard data")
-      // Set default stats to prevent infinite loading
-      setStats({
-        total_patients: 0,
-        today_appointments: 0,
-        pending_reminders: 0,
-        upcoming_followups: 0,
-        overdue_followups: 0,
-      })
+      if (mountedRef.current) {
+        setError("Failed to load dashboard data")
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
+      fetchingRef.current = false
     }
-  }
+  }, [profile?.clinic_id])
 
-  const setupRealTimeSubscriptions = () => {
+  const setupRealTimeSubscriptions = useCallback(() => {
+    if (!profile?.clinic_id) return () => {}
+
     // Subscribe to appointment changes
-    const appointmentSub = subscribeToAppointments(profile?.clinic_id!, () => {
-      setRealTimeUpdates((prev) => prev + 1)
-      fetchStats() // Refresh stats when appointments change
+    const appointmentSub = subscribeToAppointments(profile.clinic_id, () => {
+      if (mountedRef.current) {
+        setRealTimeUpdates((prev) => prev + 1)
+        fetchStats() // Refresh stats when appointments change
+      }
     })
 
     // Subscribe to reminder changes
     const reminderSub = subscribeToReminders(() => {
-      setRealTimeUpdates((prev) => prev + 1)
-      fetchStats() // Refresh stats when reminders change
+      if (mountedRef.current) {
+        setRealTimeUpdates((prev) => prev + 1)
+        fetchStats() // Refresh stats when reminders change
+      }
     })
 
     return () => {
       appointmentSub.unsubscribe()
       reminderSub.unsubscribe()
     }
-  }
+  }, [profile?.clinic_id, fetchStats])
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    if (initialized) {
+      if (profile?.clinic_id) {
+        fetchStats()
+        const cleanup = setupRealTimeSubscriptions()
+        return cleanup
+      } else {
+        // No clinic_id, stop loading
+        setLoading(false)
+        if (profile && !profile.clinic_id) {
+          setError("No clinic associated with your account. Please contact support.")
+        }
+      }
+    }
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [initialized, profile, fetchStats, setupRealTimeSubscriptions])
 
   const statCards = [
     {
@@ -129,6 +149,17 @@ export function EnhancedDashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+          <div className="animate-pulse">
+            <div className="h-6 bg-blue-500 rounded w-64 mb-2"></div>
+            <div className="h-4 bg-blue-500 rounded w-96 mb-4"></div>
+            <div className="flex gap-3">
+              <div className="h-8 bg-blue-500 rounded w-24"></div>
+              <div className="h-8 bg-blue-500 rounded w-32"></div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i} className="animate-pulse">
@@ -142,6 +173,23 @@ export function EnhancedDashboard() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-red-500 mb-4">
+            <AlertCircle className="h-12 w-12 mx-auto" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load dashboard</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={fetchStats} className="bg-blue-600 hover:bg-blue-700">
+            Try Again
+          </Button>
         </div>
       </div>
     )
@@ -167,7 +215,7 @@ export function EnhancedDashboard() {
         animate={{ opacity: 1, y: 0 }}
         className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white"
       >
-        <h1 className="text-2xl font-bold mb-2">Welcome back, Dr. {profile?.full_name?.split(" ")[0]}!</h1>
+        <h1 className="text-2xl font-bold mb-2">Welcome back, {profile?.full_name?.split(" ")[0] || "Doctor"}!</h1>
         <p className="text-blue-100 mb-4">Here's what's happening with your practice today.</p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm">
